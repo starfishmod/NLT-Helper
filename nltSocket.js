@@ -180,7 +180,7 @@ class SocketClient {
 
                                                 if(global.config.classes[global.config.nextClass].fastest.laptime !== 9999999999999){
                                                     say.stop(()=>{
-                                                        say.speak(`${racers[message.transponder].name} has fastest lap today for ${global.config.nextClass} class!`);
+                                                        say.speak(`${racers[message.transponder].name} has fastest lap of ${Number(racers[message.transponder].laptime/1000).toFixed(2)} seconds for ${global.config.nextClass} class!`);
                                                     });
                                                 }
 

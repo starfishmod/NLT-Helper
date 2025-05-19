@@ -2,10 +2,11 @@ const vorpal = require('vorpal')();
 const {SerialPort} = require('serialport');
 const fs = require('fs');
 const ntlSocket = require('./nltSocket.js');
-//const say = require('say');
+const say = require('say');
 
 console.log('NLT Helper ✨');
 //say.speak('Happy developing');
+say.speak(`NLT Helper`);
 
 
 const configFileLocation = './config.json';
@@ -135,6 +136,9 @@ vorpal
         }else{
             global.config.nextClass = args.class;
             sendSerialMessage(`Line Up: ${global.config.nextClass}`);
+            say.stop(()=> {
+                say.speak(`  ${global.config.nextClass} class to line up`);
+            });
         }
         cb();
     });
@@ -162,6 +166,8 @@ vorpal
 
         const filteredArray = filterArrayObject(winnerList, 'name');
         filteredArray.map((f,idx)=> console.log(`${idx+1}: ${f.name} - ${f.laps}:${Number(f.elapsed/1000).toFixed(3)}`));
+
+        console.log(`Fastest Lap: ${global.config.classes[args.class].fastest.name} ${global.config.classes[args.class].fastest.laptime/1000} secs`);
         cb();
     });
 
