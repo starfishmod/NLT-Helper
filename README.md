@@ -1,5 +1,5 @@
 # NLT Helper
-This is a commandline tool for working with [Next Level Timing](https://nextleveltiming.com/)
+This is a commandline tool for working with [Next Level Timing](https://nextleveltiming.com/) v.4.6.0+
 
 This is purely a demo application and may not suit your needs.
 We use this with [Brisbane RC Mini and Micro Buggy Racing](https://www.facebook.com/groups/bneminibuggies) to track our daily progress with heats and finals where we have 2 classes.
@@ -22,7 +22,6 @@ NLT Bridge>
 Hitting tab will give you several options:
 #### help 
 Provides help...
-
  
 #### apikey [api]
 Sets the apikey needed to connect to NLT. You'll find this apikey in the Setting Neon Timing page
@@ -48,7 +47,7 @@ Set the next class that is racing. Tabbing will let you choose from the classes 
 This records the results that stored for the day to generate the ordering for the finals. 
   
 #### results [class]
-See a filtered list of best laps and times for the day for a class. use this to set up the order for the finals.
+See a filtered list of best laps and times for the day for a class. Use this to set up the order for the finals.
 
 #### debug  
 Toggle Debug - not really needed but helpful to see messages between NLT this app
