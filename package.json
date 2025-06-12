@@ -1,8 +1,9 @@
 {
-  "name": "nltSocketserialbridge",
-  "version": "1.0.0",
+  "name": "nlthelper",
+  "version": "1.0.1",
   "description": "",
   "main": "index.js",
+  "bin": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
@@ -17,5 +18,14 @@
     "speaker": "^0.5.5",
     "vorpal": "^1.12.0",
     "wav": "^1.0.2"
+  },
+  "pkg": {
+    "scripts": [
+      "dist/**/*.js"
+    ],
+
+    "assets": ["*.wav","node_modules/@serialport/binding*/**/*"],
+    "targets": [ "node18-win-x64" ],
+    "outputPath": "dist"
   }
 }

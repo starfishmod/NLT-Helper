@@ -24,6 +24,7 @@ let config = fs.existsSync(configFileLocation)?JSON.parse(fs.readFileSync(config
 
 speakUp(`NLT Helper`);
 SerialConnect();
+attemptSocketConnection();
 
 //***
 vorpal
@@ -194,9 +195,9 @@ vorpal
 
         //Recalc points on drop lowest points heats
         racers.map(racer => {
-            let points = Object.values(racer.heat).map(a => a.points)
-                .toSorted((a, b) => b - a)
-                .slice(0,(Object.values(heats).length - config.dropHeat)||1);
+            let points = Object.values(racer.heat).map(a => a.points);
+            points.sort((a, b) => b - a);
+            points = points.slice(0,(Object.values(heats).length - (config.dropHeat || 0))||1);
             racer.points = points.reduce((partialSum, a) => partialSum + a, 0);
         });
 
@@ -306,7 +307,7 @@ function speakUp(txt){
 }
 
 function countdown(){
-    const file = fs.createReadStream('./countdown.wav');
+    const file = fs.createReadStream(__dirname+'/countdown.wav');
     const reader = new wav.Reader();
 
     reader.on('format', (format) => {
@@ -548,3 +549,4 @@ function sendSerialMessage(msg, showConsole = true){
     if(sPort)sPort.write(msg+"\n");
     if(showConsole)console.log(msg);
 }
+
