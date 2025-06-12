@@ -42,15 +42,19 @@ NLT Bridge> addclass micro
 NLT Bridge> addclass mini
 ```
 
-#### nextrace [class]
-Set the next class that is racing. Tabbing will let you choose from the classes added.
+#### nextrace [class] [heat]
+Set the next class and heat that is racing. Tabbing will let you choose from the classes added.
 This records the results that stored for the day to generate the ordering for the finals. 
+
+#### dropHeats [dropHeat]
+Amount of heat to drop the lowest points. e.g. ```dropHeats 2``` will drop the two lowest scoring heats.
+Most times this should be set to one. Run this before the ```results``` command.
   
 #### results [class]
 See a filtered list of best laps and times for the day for a class. Use this to set up the order for the finals.
 
 #### debug  
-Toggle Debug - not really needed but helpful to see messages between NLT this app
+Toggle Debug - not really needed but helpful to see messages between NLT and this app
 
 #### exit  
 Exits application.

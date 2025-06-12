@@ -8,6 +8,22 @@ const say = require('say');
 let racers = {};
 let times = [];
 let lastLap = false;
+
+let speaking = false;
+
+function speakUp(txt){
+    if(speaking){
+        say.stop(()=>{
+           speaking = false;
+           setImmediate(()=>{speakUp(txt);});
+        });
+    }else{
+        speaking = true;
+        console.log(txt);
+        say.speak(txt,()=>{speaking=false;});
+    }
+}
+
 class SocketClient {
     constructor(  ) {
         this.socket = null;
@@ -19,8 +35,6 @@ class SocketClient {
 
     attemptConnection() {
         if (this.socket && this.socket.connected) {
-            //console.log('Stopping previous connection attempt');
-            //this.socket.disconnect();
             return;
         }
         if (!global.config.ip || !global.config.api) {
@@ -71,13 +85,9 @@ class SocketClient {
 									countdown();
                                     break;
                                 case 'countdown_started':
-                                    //Ready
                                     global.sendSerialMessage("   SET");
-									
                                     break;
                                 case 'countdown_end_delay_started':
-                                    //Set
-                                  //  global.sendSerialMessage("   SET ");
                                     break;
                                 case 'race_started':
                                     //Go Go Go!
@@ -113,6 +123,7 @@ class SocketClient {
                                             ...winnerList
                                         );
                                         delete global.config.nextClass;
+                                        delete global.config.heat;
                                         global.writeConfig();
                                     }
                                     break;
@@ -134,14 +145,8 @@ class SocketClient {
                                     */
 									
                                     if(racers[message.transponder]){
-                                        //let time = Number((message.time - racers[message.transponder])/1000).toFixed(2);
-                                        
-                                        //times.unshift(time);
-                                        //times = times.slice(0,3)
-                                        //if(!lastLap)global.sendSerialMessage(times.join(' '));
 										racers[message.transponder].streak = message.streak;
                                     }
-                                    //racers[message.transponder] = message.time;*/
                                     break;
 								case 'standing':
 									/*{
@@ -163,6 +168,9 @@ class SocketClient {
 									
 									if(!racers[message.transponder]){
 										racers[message.transponder] = message;
+                                        if(global.config.heat){
+                                            racers[message.transponder].heat = global.config.heat;
+                                        }
 									}else if(message.status === 'active'){
 										racers[message.transponder].laptime = message.elapsed - racers[message.transponder].elapsed;
 										racers[message.transponder].elapsed = message.elapsed;
@@ -179,9 +187,7 @@ class SocketClient {
                                             if(global.config.classes[global.config.nextClass].fastest.laptime > racers[message.transponder].laptime){
 
                                                 if(global.config.classes[global.config.nextClass].fastest.laptime !== 9999999999999){
-                                                    say.stop(()=>{
-                                                        say.speak(`${racers[message.transponder].name} has fastest lap of ${Number(racers[message.transponder].laptime/1000).toFixed(2)} seconds for ${global.config.nextClass} class!`);
-                                                    });
+                                                    speakUp(`${racers[message.transponder].name} has fastest lap of ${Number(racers[message.transponder].laptime/1000).toFixed(2)} seconds for ${global.config.nextClass} class!`);
                                                 }
 
                                                 global.config.classes[global.config.nextClass].fastest = {
@@ -244,14 +250,11 @@ module.exports = SocketClient;
 
 
 function countdown(){
-
     const file = fs.createReadStream('./countdown.wav');
     const reader = new wav.Reader();
 
     reader.on('format', (format) => {
         reader.pipe(new Speaker(format));
     });
-
-
     file.pipe(reader);
 }
