@@ -24,7 +24,11 @@
       "dist/**/*.js"
     ],
 
-    "assets": ["*.wav","node_modules/@serialport/binding*/**/*"],
+    "assets": [
+      "*.wav",
+      "node_modules/@serialport/binding*/**/*",
+      "node_modules/speaker/build/Release/*.node"
+    ],
     "targets": [ "node18-win-x64" ],
     "outputPath": "dist"
   }
