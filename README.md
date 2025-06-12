@@ -7,15 +7,15 @@ While NLT is a great product (I recommend using it!), it doesn't support some of
 
 What does it do:
 * Has a countdown announcement - so racers have more than the start beep.
-* Has a serial driver to announce start, end, laptimes and last lap. We use this with a Led display panel
+* Has a serial driver to announce start, end, laptimes and last lap. We use this with a LED display panel
 * Has class handling - add a class record heat results to a class
 * Generate standings for finals - we run a simple 2 heats and one final. It doesn't handle multiple finals etc.
 * Announces the current fastest lap for the day for each class.
 
-Run this using nodejs on the commandline. Yes it should've been a Web app :P
+Run this using Node.js on the commandline. Yes it should've been a Web app :P
 
 ### How to use the App
-After startup you'll be presented with a command prompt:
+After startup, you'll be presented with a command prompt:
 ```
 NLT Bridge> 
 ```
@@ -23,35 +23,63 @@ Hitting tab will give you several options:
 #### help 
 Provides help...
  
-#### apikey [api]
+#### apikey ```api_key```
 Sets the apikey needed to connect to NLT. You'll find this apikey in the Setting Neon Timing page
 
-#### ip [ip]            
+#### ip ```ip_address```            
 Sets the ip to find NLT - defaults to 127.0.0.1 
 
-#### port [port]        
+#### port ```serial_port```        
 Sets the serial port for sending strings to display. Hitting Tab after the port will give you a list of ports.
 
 #### clearclasses
 Clear all class data - do this at the beginning of the Race day.
 
-#### addclass [class]
-Adds a new Class. For example we have two classes: "micro" and "mini". So this becomes:
+#### addclass ```new_class_name```
+Adds a new Class. For example, we have two classes: "micro" and "mini". So this becomes:
 ```
 NLT Bridge> addclass micro
 NLT Bridge> addclass mini
 ```
 
-#### nextrace [class] [heat]
+#### nextrace ```class_name``` ```heat_number```
 Set the next class and heat that is racing. Tabbing will let you choose from the classes added.
 This records the results that stored for the day to generate the ordering for the finals. 
+```
+NLT Bridge> nextrace micro 1
+micro class to line up for Heat 1
+```
 
-#### dropHeats [dropHeat]
+#### dropHeats ```number_of_heats_to_drop```
 Amount of heat to drop the lowest points. e.g. ```dropHeats 2``` will drop the two lowest scoring heats.
 Most times this should be set to one. Run this before the ```results``` command.
-  
-#### results [class]
+
+#### points ```points_from_1st_onwards...```
+Set the points for each position. For example:
+```
+NLT Bridge> points 20 18 17 16 15 14 13 12 11 10 9 8 7 6 5 4 3 2 1
+```
+The above sets 1st place to have 20 points, 2nd is 18 points etc. for each heat. 
+
+
+#### results ```class_name```
 See a filtered list of best laps and times for the day for a class. Use this to set up the order for the finals.
+```
+NLT Bridge> results micro
+┌─────┬────────┬────────┬─────────────┬─────────────┬─────────────┐
+│ POS │ Name   │ Points │      Heat 1 │      Heat 2 │      Heat 3 │
+├─────┼────────┼────────┼─────────────┼─────────────┼─────────────┤
+│  1  │ demo-5 │   10   │ 7/01:06.764 │ 7/01:02.669 │ 7/01:06.458 │
+│  2  │ demo-4 │   10   │ 6/01:00.459 │ 7/01:05.361 │ 7/01:03.363 │
+│  3  │ demo-7 │   10   │ 7/01:05.388 │ 7/01:09.240 │ 7/01:05.733 │
+│  4  │ demo-3 │   8    │ 7/01:06.739 │ 6/01:01.408 │ 7/01:04.564 │
+│  5  │ demo-6 │   7    │ 7/01:07.665 │ 7/01:07.080 │ 7/01:04.603 │
+│  6  │ demo-2 │   6    │ 7/01:06.795 │ 6/01:00.143 │ 7/01:05.469 │
+│  7  │ demo-1 │   6    │ 7/01:08.242 │ 7/01:07.628 │ 7/01:06.379 │
+└─────┴────────┴────────┴─────────────┴─────────────┴─────────────┘
+Fastest Lap: demo-5 8.016 secs
+NLT Bridge> 
+```
 
 #### debug  
 Toggle Debug - not really needed but helpful to see messages between NLT and this app

@@ -1,7 +1,6 @@
 const vorpal = require('vorpal')();
 const {SerialPort} = require('serialport');
 const fs = require('fs');
-//const ntlSocket = require('./nltSocket.js');
 const say = require('say');
 const {io}  = require("socket.io-client");
 const { Table } = require("console-table-printer");
@@ -15,257 +14,24 @@ let times = [];
 let lastLap = false;
 let speaking = false;
 let sPort = null;
+let socket = null;
+let hostSupportedEvents = [];
 const configFileLocation = './config.json';
+let config = fs.existsSync(configFileLocation)?JSON.parse(fs.readFileSync(configFileLocation)):{did : Math.random().toString(36).slice(2),classes:{}} ;
 
-//***
-class ntlSocket {
-    constructor(  ) {
-        this.socket = null;
-        this.hostSupportedEvents = [];
-        this.clientSupportedEvents = ['race','flag','gate','log'];
-        this.attemptConnection();
-
-    }
-
-    attemptConnection() {
-        if (this.socket && this.socket.connected) {
-            return;
-        }
-        if (!global.config.ip || !global.config.api) {
-            return;
-        }
-        console.log('Connecting to socket');
-        this.socket = io(`ws://${global.config.ip}:3001/neon-timing?token=${global.config.api}`, {
-            transports: ['websocket'],
-            upgrade: false,
-            reconnectionDelayMax: 2000
-        });
-        this.socket.on("connect", () => {
-            const engine = this.socket.io.engine;
-            this.hostSupportedEvents = [];
-            console.log('Connection opened');
-            global.sendSerialMessage("NLT Connected");
-
-            engine.on("close", (reason) => {
-                this.hostSupportedEvents = [];
-                console.log('Connection closed');
-                global.sendSerialMessage("NLT Disconnect");
-            });
-        });
-        this.socket.on('host_event', message => {
-            if(global.config.debug)console.log('received event from host', message);
-
-            switch(message.cmd) {
-                case 'handshake_init':
-                    if (message.protocol !== 'NT1') {
-                        if(global.config.debug)console.log('Protocol is not valid.')
-                        this.socket.disconnect();
-                    }
-                    this.hostSupportedEvents = message.events;
-                    this.sendClientEvent({
-                        cmd: 'handshake_ack',
-                        events: this.clientSupportedEvents,
-                        device: 'NLT Socket Bridge',
-                        init_time: message.time
-                    });
-                    break;
-                case 'event':
-                    switch (message.evt) {
-                        case 'race':
-                            switch (message.type) {
-                                case 'race_staging':
-                                    //Line 'em Up!
-                                    global.sendSerialMessage(" READY");
-                                    countdown();
-                                    break;
-                                case 'countdown_started':
-                                    global.sendSerialMessage("   SET");
-                                    break;
-                                case 'countdown_end_delay_started':
-                                    break;
-                                case 'race_started':
-                                    //Go Go Go!
-                                    global.sendSerialMessage(" GO! GO! GO! GO! GO!");
-                                    racers = {};
-                                    times=[]; lastLap=false;
-                                    break;
-                                case 'race_time_over':
-                                    //Last Lap!
-                                    global.sendSerialMessage("  Last Lap");
-                                    lastLap=true;
-                                    break;
-                                case 'race_completed':
-                                    //Race Ended
-                                    global.sendSerialMessage(" Race Ended");
-                                    let winnerList = Object.values(racers);
-                                    winnerList.sort((a,b)=> {
-                                        if(a.laps !== b.laps){
-                                            return b.laps - a.laps;
-                                        }else{
-                                            return a.elapsed - b.elapsed;
-                                        }
-                                    });
-
-                                    if(winnerList.length){
-                                        setTimeout(()=>{
-                                            global.sendSerialMessage("1st "+winnerList[0].name);
-                                        },8000);
-                                    }
-
-                                    if(global.config.nextClass){
-                                        global.config.classes[global.config.nextClass].results.push(
-                                            ...winnerList
-                                        );
-                                        delete global.config.nextClass;
-                                        global.writeConfig();
-                                    }
-                                    break;
-                                case 'racer_passed_gate':
-                                    /*{
-									  cmd: 'event',
-									  evt: 'race',
-									  type: 'racer_passed_gate',
-									  fast: false,
-									  streak: false,
-									  valid: false,
-									  transponder: 'demo-2',
-									  gate: '1',
-									  gate_type: 'finish',
-									  protocol: 'NT1',
-									  time: 1744333961827,
-									  did: 'NLT-PC-1046'
-									}
-                                    */
-
-                                    if(racers[message.transponder]){
-                                        racers[message.transponder].streak = message.streak;
-                                    }
-                                    break;
-                                case 'standing':
-                                    /*{
-                                      cmd: 'event',
-                                      evt: 'race',
-                                      type: 'standing',
-                                      name: 'demo-1',
-                                      laps: 0,
-                                      fast_lap: 0,
-                                      elapsed: 0,
-                                      id: 'EGld1jbRLW1fQpi7',
-                                      transponder: 'demo-1',
-                                      status: 'dnf',
-                                      protocol: 'NT1',
-                                      time: 1744333962247,
-                                      did: 'NLT-PC-1046'
-                                    }
-                                    */
-
-                                    if(!racers[message.transponder]){
-                                        racers[message.transponder] = message;
-                                        if(global.config.heat){
-                                            racers[message.transponder].heat = global.config.heat;
-                                        }
-                                    }else if(message.status === 'active'){
-                                        racers[message.transponder].laptime = message.elapsed - racers[message.transponder].elapsed;
-                                        racers[message.transponder].elapsed = message.elapsed;
-                                        racers[message.transponder].laps = message.laps;
-                                        racers[message.transponder].fast_lap = message.fast_lap;
-
-                                        let time = Number(racers[message.transponder].laptime/1000).toFixed(2);
-                                        times.unshift(time);
-                                        times = times.slice(0,3)
-                                        if(!lastLap){
-                                            global.sendSerialMessage(times.join(' '), false);
-                                        }
-                                        if(global.config.nextClass){
-                                            if(global.config.classes[global.config.nextClass].fastest.laptime > racers[message.transponder].laptime){
-
-                                                if(global.config.classes[global.config.nextClass].fastest.laptime !== 9999999999999){
-                                                    speakUp(`${racers[message.transponder].name} has fastest lap of ${Number(racers[message.transponder].laptime/1000).toFixed(2)} seconds for ${global.config.nextClass} class!`);
-                                                }
-
-                                                global.config.classes[global.config.nextClass].fastest = {
-                                                    laptime: racers[message.transponder].laptime,
-                                                    name: racers[message.transponder].name
-                                                }
-                                            }
-                                            global.writeConfig();
-                                        }
-                                    }else if(message.status === 'complete'){
-                                        racers[message.transponder].laptime = message.elapsed - racers[message.transponder].elapsed;
-                                        racers[message.transponder].elapsed = message.elapsed;
-                                        racers[message.transponder].laps = message.laps;
-                                    }
-                                    break;
-                            }
-                            break;
-                    }
-                    break;
-            }
-
-            if (message.cmd === 'handshake_init') {
-
-            }
-        });
-    }
-
-
-
-    newGateEvent(transponder) {
-        this.sendClientEvent({
-            cmd: 'event',
-            evt: 'gate',
-            type: 'transponder_passed_gate',
-            transponder
-        });
-    }
-
-    sendClientEvent(event) {
-        if (!this.socket || !this.socket.connected) {
-            if(global.config.debug)console.log('socket is not connected, cannot send message');
-            return;
-        }
-        if (event.evt && !this.hostSupportedEvents.includes(event.evt)) {
-            if(global.config.debug)console.log('Host does not support ' + event.evt + ' events');
-            return;
-        }
-        const data = {
-            ...event,
-            time: Date.now(),
-            protocol: 'NT1',
-            did: global.config.did
-        };
-        if(global.config.debug)console.log('sending client event', data);
-        this.socket.emit('client_event', data);
-    }
-}
 
 //***
 
 speakUp(`NLT Helper`);
-
-global.config = fs.existsSync(configFileLocation)?JSON.parse(fs.readFileSync(configFileLocation)):{did : Math.random().toString(36).slice(2),classes:{}} ;
-
-global.writeConfig = function(){
-    fs.writeFileSync(configFileLocation, JSON.stringify(global.config,2,2), {flag: 'w+'});
-}
-
-
-
-global.sendSerialMessage = function(msg, showConsole = true){
-    if(sPort)sPort.write(msg+"\n");
-	if(showConsole)console.log(msg);
-}
-
 SerialConnect();
 
-let ntl = new ntlSocket();
-
+//***
 vorpal
     .delimiter('NLT Bridge>')
     .show();
 
 vorpal
-    .command("port [port]", "sets the serial port")
+    .command("port <port>", "sets the serial port")
     .autocomplete({data: function(input, cb) {
         let portL =[];
             SerialPort.list().then(ports => {
@@ -277,42 +43,42 @@ vorpal
             });
         }})
     .action(function(args, cb){
-        global.config.port = args.port;
+        config.port = args.port;
         writeConfig();
         SerialConnect();
         cb();
     });
 
 vorpal
-    .command("apikey [api]", "sets the apikey")
+    .command("apikey <api>", "sets the apikey")
     .action(function(args, cb){
-        global.config.api = args.api;
+        config.api = args.api;
         writeConfig();
-        ntl.attemptConnection();
+        attemptSocketConnection();
         cb();
     });
 
 vorpal
-    .command("ip [ip]", "sets the ip")
+    .command("ip <ip>", "sets the ip")
     .action(function(args, cb){
-        global.config.ip = args.ip;
+        config.ip = args.ip;
         writeConfig();
-        ntl.attemptConnection();
+        attemptSocketConnection();
         cb();
     });
 
 vorpal
     .command("reconnect", "reconnect")
     .action(function(args, cb){
-        ntl.attemptConnection();
+        attemptSocketConnection();
         cb();
     });
 
 vorpal
     .command("debug", "Debug toggle")
     .action(function(args, cb){
-        global.config.debug = !global.config.debug;
-        console.log(`Debug is ${global.config.debug?'On':'Off'}`);
+        config.debug = !config.debug;
+        console.log(`Debug is ${config.debug?'On':'Off'}`);
         writeConfig();
         cb();
     });
@@ -320,41 +86,62 @@ vorpal
 vorpal
     .command("clearclasses", "Clear Class details")
     .action(function(args, cb){
-        global.config.classes={};
+        config.classes={};
         writeConfig();
         cb();
     });
 
 vorpal
-    .command("addclass [class]", "Add a Class")
+    .command("addclass <class>", "Add a Class")
+    .types({
+        string: ['class']
+    })
     .action(function(args, cb){
-        global.config.classes[args.class] = {fastest:{laptime:9999999999999}, results:[]};
+        config.classes[args.class] = {fastest:{laptime:9999999999999}, results:[]};
         writeConfig();
         cb();
     });
 
 vorpal
-    .command("dropHeats [dropHeat]", "Heats to drop during Calc")
+    .command("dropHeats <dropHeat>", "Heats to drop during Calc")
+    .types({
+       // integer: ['dropHeat']
+    })
     .action(function(args, cb){
-        global.config.dropHeat = parseInt(args.dropHeat,10);
+        config.dropHeat = parseInt(args.dropHeat,10);
+        writeConfig();
         cb();
     });
 
 vorpal
-    .command("nextrace [class] [heat]", "Set next Class to race ")
+    .command("points <points...>", "Points for each position from 1st onwards")
+    .types({
+        //integer: ['points']
+    })
+    .action(function(args, cb){
+        config.points = args.points;
+        writeConfig();
+        cb();
+    });
+
+vorpal
+    .command("nextrace <class> <heat>", "Set next Class to race ")
+    .types({
+        string: ['class']//,  integer: ['heat']
+    })
     .autocomplete({data: function(input, cb) {
-        cb(Object.keys(global.config.classes));
+        cb(Object.keys(config.classes));
     }})
     .action(function(args, cb){
-        if(!global.config.classes[args.class]){
-            console.log(`No Class: ${global.config.nextClass}`);
+        if(!config.classes[args.class]){
+            console.log(`No Class: ${config.nextClass}`);
         }else if(!args.heat){
             console.log(`No Heat Set`);
         }else{
-            global.config.nextClass = args.class;
-            global.config.heat = parseInt(args.heat,10);
-            //sendSerialMessage(`Line Up: ${global.config.nextClass}`);
-            speakUp(`${global.config.nextClass} class to line up for Heat ${global.config.heat}`);
+            config.nextClass = args.class;
+            config.heat = parseInt(args.heat,10);
+            //sendSerialMessage(`Line Up: ${config.nextClass}`);
+            speakUp(`${config.nextClass} class to line up for Heat ${config.heat}`);
 
         }
         cb();
@@ -362,19 +149,22 @@ vorpal
 
 
 vorpal
-    .command("results [class]", "Detail overall position results for a class")
+    .command("results <class>", "Detail overall position results for a class")
+    .types({
+        string: ['class']
+    })
     .autocomplete({data: function(input, cb) {
-            cb(Object.keys(global.config.classes));
+            cb(Object.keys(config.classes));
         }})
     .action(function(args, cb){
-        if(!global.config.classes[args.class]){
+        if(!config.classes[args.class]){
             cb();
             return;
         }
 
-        const pointsAmounts = [10,8,7,6,5,4,3,2,1]; //Todo Make this configurable??
+        const pointsAmounts = config.points || [10,8,7,6,5,4,3,2,1];
 
-        let winnerList = global.config.classes[args.class].results;
+        let winnerList = config.classes[args.class].results;
 
         let racers = {};
         let heats = {};
@@ -406,7 +196,7 @@ vorpal
         racers.map(racer => {
             let points = Object.values(racer.heat).map(a => a.points)
                 .toSorted((a, b) => b - a)
-                .slice(0,(global.config.heat - global.config.dropHeat)||1);
+                .slice(0,(Object.values(heats).length - config.dropHeat)||1);
             racer.points = points.reduce((partialSum, a) => partialSum + a, 0);
         });
 
@@ -471,26 +261,11 @@ vorpal
 
 
         p.printTable();
-        console.log(`Fastest Lap: ${global.config.classes[args.class].fastest.name} ${global.config.classes[args.class].fastest.laptime/1000} secs`);
+        console.log(`Fastest Lap: ${config.classes[args.class].fastest.name} ${config.classes[args.class].fastest.laptime/1000} secs`);
         cb();
     });
 
 //**
-
-
-
-
-function filterArrayObject(arr, key) {
-    const seenValues = new Set();
-    return arr.filter(obj => {
-        const value = obj[key];
-        if (seenValues.has(value)) {
-            return false;
-        }
-        seenValues.add(value);
-        return true;
-    });
-}
 
 function compareTimes(a,b) {
     if(a.laps !== b.laps){
@@ -500,8 +275,7 @@ function compareTimes(a,b) {
     }
 }
 
-
-const convertMilliSecondToReadable = (milliSecond) => {
+function convertMilliSecondToReadable (milliSecond) {
     const hours = Math.floor(milliSecond / (1000 * 60 * 60));
     let remainingMilliSecond = milliSecond - (hours * 1000 * 60 * 60);
     const minutes = Math.floor(remainingMilliSecond / (1000 * 60));
@@ -510,8 +284,7 @@ const convertMilliSecondToReadable = (milliSecond) => {
     remainingMilliSecond = remainingMilliSecond - (seconds * 1000);
 
     return `${hours?Number(hours).toString(10).padStart(2, '0')+':':''}${Number(minutes).toString(10).padStart(2, '0')}:${Number(seconds).toString(10).padStart(2, '0')}.${Number(remainingMilliSecond).toString(10).padStart(3, '0')}`;
-
-};
+}
 
 
 function speakUp(txt){
@@ -543,13 +316,13 @@ function countdown(){
 }
 
 function SerialConnect(){
-    if(!global.config.port){ return}
+    if(!config.port){ return}
 
     SerialPort.list().then(ports => {
         ports.forEach(function (port) {
-            if(port.path!==global.config.port)return;
+            if(port.path!==config.port)return;
             sPort = new SerialPort({
-                path: global.config.port,
+                path: config.port,
                 baudRate: 115200,
             });
             sPort.open(function (err) {
@@ -564,4 +337,214 @@ function SerialConnect(){
             });
         });
     });
+}
+
+
+function attemptSocketConnection() {
+    if (socket && socket.connected) {
+        return;
+    }
+    if (!config.ip || !config.api) {
+        return;
+    }
+    console.log('Connecting to socket');
+    socket = io(`ws://${config.ip}:3001/neon-timing?token=${config.api}`, {
+        transports: ['websocket'],
+        upgrade: false,
+        reconnectionDelayMax: 2000
+    });
+    socket.on("connect", () => {
+        const engine = socket.io.engine;
+        hostSupportedEvents = [];
+        console.log('Connection opened');
+        sendSerialMessage("NLT Connected");
+
+        engine.on("close", (reason) => {
+            hostSupportedEvents = [];
+            console.log('Connection closed');
+            sendSerialMessage("NLT Disconnect");
+        });
+    });
+    socket.on('host_event', message => {
+        if(config.debug)console.log('received event from host', message);
+
+        switch(message.cmd) {
+            case 'handshake_init':
+                if (message.protocol !== 'NT1') {
+                    if(config.debug)console.log('Protocol is not valid.')
+                    socket.disconnect();
+                }
+                hostSupportedEvents = message.events;
+                sendSocketEvent({
+                    cmd: 'handshake_ack',
+                    events: ['race','flag','gate','log'],
+                    device: 'NLT Socket Bridge',
+                    init_time: message.time
+                });
+                break;
+            case 'event':
+                switch (message.evt) {
+                    case 'race':
+                        switch (message.type) {
+                            case 'race_staging':
+                                //Line 'em Up!
+                                sendSerialMessage(" READY");
+                                countdown();
+                                break;
+                            case 'countdown_started':
+                                sendSerialMessage("   SET");
+                                break;
+                            case 'countdown_end_delay_started':
+                                break;
+                            case 'race_started':
+                                //Go Go Go!
+                                sendSerialMessage(" GO! GO! GO! GO! GO!");
+                                racers = {};
+                                times=[]; lastLap=false;
+                                break;
+                            case 'race_time_over':
+                                //Last Lap!
+                                sendSerialMessage("  Last Lap");
+                                lastLap=true;
+                                break;
+                            case 'race_completed':
+                                //Race Ended
+                                sendSerialMessage(" Race Ended");
+                                let winnerList = Object.values(racers);
+                                winnerList.sort((a,b)=> {
+                                    if(a.laps !== b.laps){
+                                        return b.laps - a.laps;
+                                    }else{
+                                        return a.elapsed - b.elapsed;
+                                    }
+                                });
+
+                                if(winnerList.length){
+                                    setTimeout(()=>{
+                                        sendSerialMessage("1st "+winnerList[0].name);
+                                    },8000);
+                                }
+
+                                if(config.nextClass){
+                                    config.classes[config.nextClass].results.push(
+                                        ...winnerList
+                                    );
+                                    delete config.nextClass;
+                                    writeConfig();
+                                }
+                                break;
+                            case 'racer_passed_gate':
+                                /*{
+                                  cmd: 'event',
+                                  evt: 'race',
+                                  type: 'racer_passed_gate',
+                                  fast: false,
+                                  streak: false,
+                                  valid: false,
+                                  transponder: 'demo-2',
+                                  gate: '1',
+                                  gate_type: 'finish',
+                                  protocol: 'NT1',
+                                  time: 1744333961827,
+                                  did: 'NLT-PC-1046'
+                                }
+                                */
+
+                                if(racers[message.transponder]){
+                                    racers[message.transponder].streak = message.streak;
+                                }
+                                break;
+                            case 'standing':
+                                /*{
+                                  cmd: 'event',
+                                  evt: 'race',
+                                  type: 'standing',
+                                  name: 'demo-1',
+                                  laps: 0,
+                                  fast_lap: 0,
+                                  elapsed: 0,
+                                  id: 'EGld1jbRLW1fQpi7',
+                                  transponder: 'demo-1',
+                                  status: 'dnf',
+                                  protocol: 'NT1',
+                                  time: 1744333962247,
+                                  did: 'NLT-PC-1046'
+                                }
+                                */
+
+                                if(!racers[message.transponder]){
+                                    racers[message.transponder] = message;
+                                    if(config.heat){
+                                        racers[message.transponder].heat = config.heat;
+                                    }
+                                }else if(message.status === 'active'){
+                                    racers[message.transponder].laptime = message.elapsed - racers[message.transponder].elapsed;
+                                    racers[message.transponder].elapsed = message.elapsed;
+                                    racers[message.transponder].laps = message.laps;
+                                    racers[message.transponder].fast_lap = message.fast_lap;
+
+                                    let time = Number(racers[message.transponder].laptime/1000).toFixed(2);
+                                    times.unshift(time);
+                                    times = times.slice(0,3)
+                                    if(!lastLap){
+                                        sendSerialMessage(times.join(' '), false);
+                                    }
+                                    if(config.nextClass){
+                                        if(config.classes[config.nextClass].fastest.laptime > racers[message.transponder].laptime){
+
+                                            if(config.classes[config.nextClass].fastest.laptime !== 9999999999999){
+                                                speakUp(`${racers[message.transponder].name} has fastest lap of ${Number(racers[message.transponder].laptime/1000).toFixed(2)} seconds for ${config.nextClass} class!`);
+                                            }
+
+                                            config.classes[config.nextClass].fastest = {
+                                                laptime: racers[message.transponder].laptime,
+                                                name: racers[message.transponder].name
+                                            }
+                                        }
+                                        writeConfig();
+                                    }
+                                }else if(message.status === 'complete'){
+                                    racers[message.transponder].laptime = message.elapsed - racers[message.transponder].elapsed;
+                                    racers[message.transponder].elapsed = message.elapsed;
+                                    racers[message.transponder].laps = message.laps;
+                                }
+                                break;
+                        }
+                        break;
+                }
+                break;
+        }
+
+        if (message.cmd === 'handshake_init') {
+
+        }
+    });
+}
+
+function sendSocketEvent(event) {
+    if (!socket || !socket.connected) {
+        if(config.debug)console.log('socket is not connected, cannot send message');
+        return;
+    }
+    if (event.evt && !hostSupportedEvents.includes(event.evt)) {
+        if(config.debug)console.log('Host does not support ' + event.evt + ' events');
+        return;
+    }
+    const data = {
+        ...event,
+        time: Date.now(),
+        protocol: 'NT1',
+        did: config.did
+    };
+    if(config.debug)console.log('sending client event', data);
+    socket.emit('client_event', data);
+}
+
+function writeConfig(){
+    fs.writeFileSync(configFileLocation, JSON.stringify(config,2,2), {flag: 'w+'});
+}
+
+function sendSerialMessage(msg, showConsole = true){
+    if(sPort)sPort.write(msg+"\n");
+    if(showConsole)console.log(msg);
 }
