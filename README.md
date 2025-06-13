@@ -33,7 +33,8 @@ Sets the ip to find NLT - defaults to 127.0.0.1
 Sets the serial port for sending strings to display. Hitting Tab after the port will give you a list of ports.
 
 #### clearclasses
-Clear all class data - do this at the beginning of the Race day.
+Clear all class data - do this at the beginning of the Race day. This no 
+longer removes all the classes.
 
 #### addclass ```new_class_name```
 Adds a new Class. For example, we have two classes: "micro" and "mini". So this becomes:
@@ -42,12 +43,34 @@ NLT Bridge> addclass micro
 NLT Bridge> addclass mini
 ```
 
-#### nextrace ```class_name``` ```heat_number```
+#### removeclass ```class_name```
+Delete any unused classes.
+
+#### nextrace ```class_name``` ```heat_number``` ```group(opt)```
 Set the next class and heat that is racing. Tabbing will let you choose from the classes added.
-This records the results that stored for the day to generate the ordering for the finals. 
+This records the results that stored for the day to generate the ordering for the finals.
+The Group field allows you to run multiple Groups of the same class.
 ```
 NLT Bridge> nextrace micro 1
 micro class to line up for Heat 1
+```
+After the first Heat, it will generate a line-up order based on the last heat. 
+Drivers that did not race in the previous heat will not be listed.
+``` 
+NLT Bridge> nextrace micro 2
+┌─────────────┬────────┐
+│ Line Up POS │ Name   │
+├─────────────┼────────┤
+│      1      │ demo-4 │
+│      2      │ demo-2 │
+│      3      │ demo-1 │
+│      4      │ demo-5 │
+│      5      │ demo-3 │
+│      6      │ demo-7 │
+│      7      │ demo-6 │
+└─────────────┴────────┘
+m class  to line up for Heat 2
+
 ```
 
 #### dropHeats ```number_of_heats_to_drop```

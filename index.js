@@ -87,7 +87,25 @@ vorpal
 vorpal
     .command("clearclasses", "Clear Class details")
     .action(function(args, cb){
-        config.classes={};
+        //config.classes={};
+        Object.keys(config.classes).map((className) => {
+            config.classes[className] = {fastest:{laptime:9999999999999}, results:[]};
+        });
+        config.raceday=[];
+        writeConfig();
+        cb();
+    });
+
+vorpal
+    .command("removeclass <class>", "Remove a Class")
+    .types({
+        string: ['class']
+    })
+    .autocomplete({data: function(input, cb) {
+            cb(Object.keys(config.classes));
+        }})
+    .action(function(args, cb){
+        delete config.classes[args.class];
         writeConfig();
         cb();
     });
@@ -126,7 +144,7 @@ vorpal
     });
 
 vorpal
-    .command("nextrace <class> <heat>", "Set next Class to race ")
+    .command("nextrace <class> <heat> [group]", "Set next Class/Heat and option Group to race ")
     .types({
         string: ['class']//,  integer: ['heat']
     })
@@ -134,15 +152,53 @@ vorpal
         cb(Object.keys(config.classes));
     }})
     .action(function(args, cb){
-        if(!config.classes[args.class]){
+        if(config.raceday
+            .filter(race=>race.class===args.class
+                && race.group===(args.group||"") && race.heat===args.heat).length){
+            console.log('This race has already been run');
+        }else if(!config.classes[args.class]){
             console.log(`No Class: ${config.nextClass}`);
         }else if(!args.heat){
             console.log(`No Heat Set`);
         }else{
+
+            //Display Line up
+            let raceList = config.classes[args.class].results.filter(res=>res.heat===args.heat-1 && res.group===(args.group||""));
+            raceList.sort(compareTimes);
+            if(raceList.length > 0){
+                const p = new Table({
+                    columns: [{
+                        name: "position",
+                        alignment: "center",
+                        title: "Line Up POS"
+                    },
+                        {
+                            name: "name",
+                            alignment: "left",
+                            title: "Name",
+                        }/*,
+                        {
+                            name: "heat",
+                            alignment: 'right',
+                            title: `Heat ${args.heat-1}`,
+                        }*/
+                        ]
+                });
+                raceList.map((racer,idx) => {
+                    let out = { position: idx+1, name:racer.name//,
+//                        heat: `${racer.laps}/${convertMilliSecondToReadable(racer.elapsed)}`
+                    };
+                    p.addRow(out);
+                })
+                p.printTable();
+            }
+             
+
             config.nextClass = args.class;
-            config.heat = parseInt(args.heat,10);
+            config.nextGroup = args.group || '';
+            config.nextHeat = parseInt(args.heat,10);
             //sendSerialMessage(`Line Up: ${config.nextClass}`);
-            speakUp(`${config.nextClass} class to line up for Heat ${config.heat}`);
+            speakUp(`${config.nextClass} class ${ config.nextGroup ? 'Group '+ config.nextGroup:'' } to line up for Heat ${config.nextHeat}`);
 
         }
         cb();
@@ -430,7 +486,11 @@ function attemptSocketConnection() {
                                     config.classes[config.nextClass].results.push(
                                         ...winnerList
                                     );
+
+                                    config.raceday.push({class:config.nextClass,heat:config.nextHeat,group:config.nextGroup});
                                     delete config.nextClass;
+                                    delete config.nextHeat;
+                                    delete config.nextGroup;
                                     writeConfig();
                                 }
                                 break;
@@ -475,8 +535,9 @@ function attemptSocketConnection() {
 
                                 if(!racers[message.transponder]){
                                     racers[message.transponder] = message;
-                                    if(config.heat){
-                                        racers[message.transponder].heat = config.heat;
+                                    if(config.nextHeat){
+                                        racers[message.transponder].heat = config.nextHeat;
+                                        racers[message.transponder].group = config.nextGroup;
                                     }
                                 }else if(message.status === 'active'){
                                     racers[message.transponder].laptime = message.elapsed - racers[message.transponder].elapsed;
