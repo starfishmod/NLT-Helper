@@ -12,7 +12,11 @@ What does it do:
 * Generate standings for finals - we run a simple 2 heats and one final. It doesn't handle multiple finals etc.
 * Announces the current fastest lap for the day for each class.
 
-Run this using Node.js on the commandline. Yes it should've been a Web app :P
+Run this using Node.js on the commandline, or use the executable in the releases. 
+Yes, it should've been a Web app :P
+
+To see how it works:
+https://www.youtube.com/watch?v=nXCQyP0KglI 
 
 ### How to use the App
 After startup, you'll be presented with a command prompt:
@@ -31,6 +35,15 @@ Sets the ip to find NLT - defaults to 127.0.0.1
 
 #### port ```serial_port```        
 Sets the serial port for sending strings to display. Hitting Tab after the port will give you a list of ports.
+
+#### mute ```[countdown,fastestClass,lineup]```
+Mute the audio for different NLT Events.
+* countdown - is the built-in countdown on start race
+* fastestClass - don't say the "fastest lap for xxx class" audio. This stops the ovelapping speech.
+* lineup - don't say the "Line Up for XXX class..."
+
+#### unmute ```[countdown,fastestClass,lineup]```
+Start using the audio again :)
 
 #### clearclasses
 Clear all class data - do this at the beginning of the Race day. This no 
@@ -72,6 +85,9 @@ NLT Bridge> nextrace micro 2
 m class  to line up for Heat 2
 
 ```
+
+#### removerace ```class_name``` ```heat_number``` ```group(opt)```
+If a race goes bad, and you need to remove the data from NLT Helper. Use this so you can re-run.
 
 #### dropHeats ```number_of_heats_to_drop```
 Amount of heat to drop the lowest points. e.g. ```dropHeats 2``` will drop the two lowest scoring heats.
