@@ -17,10 +17,12 @@ let sPort = null;
 let socket = null;
 let hostSupportedEvents = [];
 const configFileLocation = './config.json';
-let config = fs.existsSync(configFileLocation)?JSON.parse(fs.readFileSync(configFileLocation)):{did : Math.random().toString(36).slice(2),classes:{}} ;
+let config;// = fs.existsSync(configFileLocation)?JSON.parse(fs.readFileSync(configFileLocation)):{did : Math.random().toString(36).slice(2),classes:{}} ;
 
 
 //***
+
+loadConfig();
 
 speakUp(`NLT Helper`);
 SerialConnect();
@@ -79,7 +81,25 @@ vorpal
     .command("debug", "Debug toggle")
     .action(function(args, cb){
         config.debug = !config.debug;
-        console.log(`Debug is ${config.debug?'On':'Off'}`);
+        this.log(`Debug is ${config.debug?'On':'Off'}`);
+        writeConfig();
+        cb();
+    });
+
+vorpal
+    .command("mute <audio>", "Debug toggle")
+    .autocomplete(['countdown','fastestClass','lineup'])
+    .action(function(args, cb){
+        config.mute[args.audio] = true;
+        writeConfig();
+        cb();
+    });
+
+vorpal
+    .command("unmute <audio>", "Debug toggle")
+    .autocomplete(['countdown','fastestClass','lineup'])
+    .action(function(args, cb){
+        delete config.mute[args.audio];
         writeConfig();
         cb();
     });
@@ -123,9 +143,6 @@ vorpal
 
 vorpal
     .command("dropHeats <dropHeat>", "Heats to drop during Calc")
-    .types({
-       // integer: ['dropHeat']
-    })
     .action(function(args, cb){
         config.dropHeat = parseInt(args.dropHeat,10);
         writeConfig();
@@ -134,13 +151,49 @@ vorpal
 
 vorpal
     .command("points <points...>", "Points for each position from 1st onwards")
-    .types({
-        //integer: ['points']
-    })
     .action(function(args, cb){
         config.points = args.points;
         writeConfig();
         cb();
+    });
+
+vorpal
+    .command("removerace <class> <heat> [group]", "Remove Previously run Class/Heat and option Group to race ")
+    .types({
+        string: ['class']//,  integer: ['heat']
+    })
+    .autocomplete({data: function(input, cb) {
+            cb(Object.keys(config.classes));
+        }})
+    .action(function(args, cb) {
+        if(config.raceday
+            .filter(race=>race.class===args.class
+                && race.group===(args.group||"") && race.heat===args.heat).length) {
+            this.prompt({
+                type: 'confirm',
+                name: 'confirmDelete',
+                message: `Are you sure you want to delete ${args.class}?`,
+                default: false
+            }).then((result) => {
+                if (result.confirmDelete) {
+                    // Add actual deletion logic here
+                    this.log(`Deleting ${args.class}...`);
+                    config.raceday = config.raceday
+                        .filter(race=>race.class!==args.class
+                            || race.group!==(args.group||"") || race.heat!==args.heat);
+
+                    config.classes[args.class].results = config.classes[args.class].results
+                        .filter(race => (race.group||"")!==(args.group||"") || race.heat!==args.heat);
+                    writeConfig();
+                } else {
+                    this.log(`Deletion of ${args.class} cancelled.`);
+                }
+                cb();
+            });
+        }else{
+            this.log(`Race does not exist.`);
+            cb();
+        }
     });
 
 vorpal
@@ -155,11 +208,11 @@ vorpal
         if(config.raceday
             .filter(race=>race.class===args.class
                 && race.group===(args.group||"") && race.heat===args.heat).length){
-            console.log('This race has already been run');
+            this.log('This race has already been run');
         }else if(!config.classes[args.class]){
-            console.log(`No Class: ${config.nextClass}`);
+            this.log(`No Class: ${config.nextClass}`);
         }else if(!args.heat){
-            console.log(`No Heat Set`);
+            this.log(`No Heat Set`);
         }else{
 
             //Display Line up
@@ -198,7 +251,7 @@ vorpal
             config.nextGroup = args.group || '';
             config.nextHeat = parseInt(args.heat,10);
             //sendSerialMessage(`Line Up: ${config.nextClass}`);
-            speakUp(`${config.nextClass} class ${ config.nextGroup ? 'Group '+ config.nextGroup:'' } to line up for Heat ${config.nextHeat}`);
+            if(!config.mute.lineup)speakUp(`${config.nextClass} class ${ config.nextGroup ? 'Group '+ config.nextGroup:'' } to line up for Heat ${config.nextHeat}`);
 
         }
         cb();
@@ -318,7 +371,7 @@ vorpal
 
 
         p.printTable();
-        console.log(`Fastest Lap: ${config.classes[args.class].fastest.name} ${config.classes[args.class].fastest.laptime/1000} secs`);
+        this.log(`Fastest Lap: ${config.classes[args.class].fastest.name} ${config.classes[args.class].fastest.laptime/1000} secs`);
         cb();
     });
 
@@ -346,7 +399,7 @@ function convertMilliSecondToReadable (milliSecond) {
 
 function speakUp(txt){
     if(platform()==='linux'){ //There is many bugs in Say for Linux :/
-        console.log(txt);
+        console.log(txt+"\n");
         say.speak(txt, null, null,()=>{speaking=false;});
         return
     }
@@ -357,12 +410,13 @@ function speakUp(txt){
         });
     }else{
         speaking = true;
-        console.log(txt);
+        console.log(txt+"\n");
         say.speak(txt, null, null,()=>{speaking=false;});
     }
 }
 
 function countdown(){
+    if(config.mute.countdown)return;
     const file = fs.createReadStream(__dirname+'/countdown.wav');
     const reader = new wav.Reader();
 
@@ -404,7 +458,7 @@ function attemptSocketConnection() {
     if (!config.ip || !config.api) {
         return;
     }
-    console.log('Connecting to socket');
+    console.log("Connecting to socket\n");
     socket = io(`ws://${config.ip}:3001/neon-timing?token=${config.api}`, {
         transports: ['websocket'],
         upgrade: false,
@@ -413,12 +467,12 @@ function attemptSocketConnection() {
     socket.on("connect", () => {
         const engine = socket.io.engine;
         hostSupportedEvents = [];
-        console.log('Connection opened');
+        console.log("Connection opened\n");
         sendSerialMessage("NLT Connected");
 
         engine.on("close", (reason) => {
             hostSupportedEvents = [];
-            console.log('Connection closed');
+            console.log("Connection closed\n");
             sendSerialMessage("NLT Disconnect");
         });
     });
@@ -428,7 +482,7 @@ function attemptSocketConnection() {
         switch(message.cmd) {
             case 'handshake_init':
                 if (message.protocol !== 'NT1') {
-                    if(config.debug)console.log('Protocol is not valid.')
+                    if(config.debug)console.log("Protocol is not valid.\n")
                     socket.disconnect();
                 }
                 hostSupportedEvents = message.events;
@@ -555,7 +609,7 @@ function attemptSocketConnection() {
                                         if(config.classes[config.nextClass].fastest.laptime > racers[message.transponder].laptime){
 
                                             if(config.classes[config.nextClass].fastest.laptime !== 9999999999999){
-                                                speakUp(`${racers[message.transponder].name} has fastest lap of ${Number(racers[message.transponder].laptime/1000).toFixed(2)} seconds for ${config.nextClass} class!`);
+                                                if(!config.mute.fastestClass)speakUp(`${racers[message.transponder].name} has fastest lap of ${Number(racers[message.transponder].laptime/1000).toFixed(2)} seconds for ${config.nextClass} class!`);
                                             }
 
                                             config.classes[config.nextClass].fastest = {
@@ -600,6 +654,20 @@ function sendSocketEvent(event) {
     };
     if(config.debug)console.log('sending client event', data);
     socket.emit('client_event', data);
+}
+
+function loadConfig(){
+    let fConf = fs.existsSync(configFileLocation)?JSON.parse(fs.readFileSync(configFileLocation)):{};
+    config = {
+        did : Math.random().toString(36).slice(2),
+        classes:{},
+        ip:'127.0.0.1',
+        debug: false,
+        raceday:[],
+        mute:{},
+        ...fConf
+    };
+
 }
 
 function writeConfig(){
