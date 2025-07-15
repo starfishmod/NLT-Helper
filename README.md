@@ -59,12 +59,12 @@ NLT Bridge> addclass mini
 #### removeclass ```class_name```
 Delete any unused classes.
 
-#### nextrace ```class_name``` ```heat_number``` ```group(opt)```
+#### nextheat ```class_name``` ```heat_number``` ```group(opt: A, B, C etc)```
 Set the next class and heat that is racing. Tabbing will let you choose from the classes added.
 This records the results that stored for the day to generate the ordering for the finals.
 The Group field allows you to run multiple Groups of the same class.
 ```
-NLT Bridge> nextrace micro 1
+NLT Bridge> nextheat micro 1
 micro class to line up for Heat 1
 ```
 After the first Heat, it will generate a line-up order based on the last heat. 
@@ -86,10 +86,10 @@ m class  to line up for Heat 2
 
 ```
 
-#### removerace ```class_name``` ```heat_number``` ```group(opt)```
+#### removeheat ```class_name``` ```heat_number``` ```group(opt)```
 If a race goes bad, and you need to remove the data from NLT Helper. Use this so you can re-run.
 
-#### dropHeats ```number_of_heats_to_drop```
+#### dropheats ```number_of_heats_to_drop```
 Amount of heat to drop the lowest points. e.g. ```dropHeats 2``` will drop the two lowest scoring heats.
 Most times this should be set to one. Run this before the ```results``` command.
 
@@ -100,28 +100,36 @@ NLT Bridge> points 20 18 17 16 15 14 13 12 11 10 9 8 7 6 5 4 3 2 1
 ```
 The above sets 1st place to have 20 points, 2nd is 18 points etc. for each heat. 
 
+#### splitfinals ```number_of_racers_in_each_final_group```
+The amount of racers in each final group. This provides a one or more splits as seen in the results for a class.
 
 #### results ```class_name```
 See a filtered list of best laps and times for the day for a class. Use this to set up the order for the finals.
 ```
 NLT Bridge> results micro
-┌─────┬────────┬────────┬─────────────┬─────────────┬─────────────┐
-│ POS │ Name   │ Points │      Heat 1 │      Heat 2 │      Heat 3 │
-├─────┼────────┼────────┼─────────────┼─────────────┼─────────────┤
-│  1  │ demo-5 │   10   │ 7/01:06.764 │ 7/01:02.669 │ 7/01:06.458 │
-│  2  │ demo-4 │   10   │ 6/01:00.459 │ 7/01:05.361 │ 7/01:03.363 │
-│  3  │ demo-7 │   10   │ 7/01:05.388 │ 7/01:09.240 │ 7/01:05.733 │
-│  4  │ demo-3 │   8    │ 7/01:06.739 │ 6/01:01.408 │ 7/01:04.564 │
-│  5  │ demo-6 │   7    │ 7/01:07.665 │ 7/01:07.080 │ 7/01:04.603 │
-│  6  │ demo-2 │   6    │ 7/01:06.795 │ 6/01:00.143 │ 7/01:05.469 │
-│  7  │ demo-1 │   6    │ 7/01:08.242 │ 7/01:07.628 │ 7/01:06.379 │
-└─────┴────────┴────────┴─────────────┴─────────────┴─────────────┘
+┌──────┬────────┬────────┬─────────────┬─────────────┬─────────────┐
+│ POS  │ Name   │ Points │      Heat 1 │      Heat 2 │      Heat 3 │
+├──────┼────────┼────────┼─────────────┼─────────────┼─────────────┤
+│ A 1  │ demo-5 │   10   │ 7/01:06.764 │ 7/01:02.669 │ 7/01:06.458 │
+│ A 2  │ demo-4 │   10   │ 6/01:00.459 │ 7/01:05.361 │ 7/01:03.363 │
+│ A 3  │ demo-7 │   10   │ 7/01:05.388 │ 7/01:09.240 │ 7/01:05.733 │
+│ A 4  │ demo-3 │   8    │ 7/01:06.739 │ 6/01:01.408 │ 7/01:04.564 │
+├──────┼────────┼────────┼─────────────┼─────────────┼─────────────┤
+│ B 1  │ demo-6 │   7    │ 7/01:07.665 │ 7/01:07.080 │ 7/01:04.603 │
+│ B 2  │ demo-2 │   6    │ 7/01:06.795 │ 6/01:00.143 │ 7/01:05.469 │
+│ B 3  │ demo-1 │   6    │ 7/01:08.242 │ 7/01:07.628 │ 7/01:06.379 │
+└──────┴────────┴────────┴─────────────┴─────────────┴─────────────┘
 Fastest Lap: demo-5 8.016 secs
 NLT Bridge> 
 ```
 
+#### final ```class_name``` ```group(opt: A, B, C etc)```
+Like ```nextheat``` this sets the racing up for the final for each class and finals group.
+Rerun ```results``` to see the heats and finals for a class.
+_Note: multiple finals are not handled yet._
+
 #### debug  
-Toggle Debug - not really needed but helpful to see messages between NLT and this app
+Toggle Debug - not really needed, but helpful to see messages between NLT and this app
 
 #### exit  
 Exits application.
