@@ -141,4 +141,5 @@ Please let us know if you use this software - it helps me keep motivated :)
 |------------------------------------------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------------------------|
 | <img src="https://github.com/user-attachments/assets/a9086b3b-b85d-4df2-8cd6-1790629a6bb5" width="100px"/> | [High Rollers RC Funpark](https://www.facebook.com/profile.php?id=61560016574097) (Michigan, USA)               |
 | <img src="https://github.com/user-attachments/assets/ff38d5b8-af60-42ab-9591-d19d81dc4a7f" width="100px"/> | [Brisbane RC Mini and Micro Buggy Racing](https://www.facebook.com/groups/bneminibuggies) (Brisbane, Australia) |
+| <img src="https://github.com/user-attachments/assets/bbe809a4-3923-42df-abc3-c9d6ca1bdfca" width="100px"/> | [San Diego RC Events and Parties](https://www.sandiegorcevents.com/)                                            |
 
