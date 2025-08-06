@@ -26,6 +26,8 @@ NLT Bridge>
 Hitting tab will give you several options:
 #### help 
 Provides help...
+
+### Genaral Config
  
 #### apikey ```api_key```
 Sets the apikey needed to connect to NLT. You'll find this apikey in the Setting Neon Timing page
@@ -45,19 +47,50 @@ Mute the audio for different NLT Events.
 #### unmute ```[countdown,fastestClass,lineup]```
 Start using the audio again :)
 
-#### clearclasses
-Clear all class data - do this at the beginning of the Race day. This no 
-longer removes all the classes.
+#### dropheats ```number_of_heats_to_drop```
+Amount of heat to drop the lowest points. e.g. ```dropHeats 2``` will drop the two lowest scoring heats.
+Most times this should be set to one. Run this before the ```results``` command.
+
+#### points ```points_from_1st_onwards...```
+Set the points for each position. For example:
+```
+NLT Bridge> points 20 18 17 16 15 14 13 12 11 10 9 8 7 6 5 4 3 2 1
+```
+The above sets 1st place to have 20 points, 2nd is 18 points etc. for each heat.
+
+#### splitfinals ```number_of_racers_in_each_final_group```
+The amount of racers in each final group. This provides a one or more splits as seen in the results for a class.
 
 #### addclass ```new_class_name```
-Adds a new Class. For example, we have two classes: "micro" and "mini". So this becomes:
+Adds a new Default Class. These default classes are added to any new Race Event.
+For example, we have two classes: "micro" and "mini". So this becomes:
 ```
 NLT Bridge> addclass micro
 NLT Bridge> addclass mini
 ```
 
 #### removeclass ```class_name```
-Delete any unused classes.
+Delete any unused Default classes. Does not remove it from a Race Event.
+
+#### debug
+Toggle Debug - not really needed, but helpful to see messages between NLT and this app
+
+#### exit
+Exits application.
+
+### Race Events
+From 1.0.5 NLT Helper requires a Race Event. Each time you have a Race Day you create a new event for that day. Each
+Race Event creates a new race event file that can be reloaded. The last Race event is automatically loaded.
+
+#### newevent ```Name of Event...```
+Creates a new race event ready to run the heats and finals.
+
+#### loadevent ```Name of Event...```
+Load a previous race event.
+
+#### clearclasses (deprecated - use newevent)
+Clear all class data - do this at the beginning of the Race day. This no 
+longer removes all the classes.
 
 #### nextheat ```class_name``` ```heat_number``` ```group(opt: A, B, C etc)```
 Set the next class and heat that is racing. Tabbing will let you choose from the classes added.
@@ -89,20 +122,6 @@ m class  to line up for Heat 2
 #### removeheat ```class_name``` ```heat_number``` ```group(opt)```
 If a race goes bad, and you need to remove the data from NLT Helper. Use this so you can re-run.
 
-#### dropheats ```number_of_heats_to_drop```
-Amount of heat to drop the lowest points. e.g. ```dropHeats 2``` will drop the two lowest scoring heats.
-Most times this should be set to one. Run this before the ```results``` command.
-
-#### points ```points_from_1st_onwards...```
-Set the points for each position. For example:
-```
-NLT Bridge> points 20 18 17 16 15 14 13 12 11 10 9 8 7 6 5 4 3 2 1
-```
-The above sets 1st place to have 20 points, 2nd is 18 points etc. for each heat. 
-
-#### splitfinals ```number_of_racers_in_each_final_group```
-The amount of racers in each final group. This provides a one or more splits as seen in the results for a class.
-
 #### results ```class_name```
 See a filtered list of best laps and times for the day for a class. Use this to set up the order for the finals.
 ```
@@ -128,11 +147,7 @@ Like ```nextheat``` this sets the racing up for the final for each class and fin
 Rerun ```results``` to see the heats and finals for a class.
 _Note: multiple finals are not handled yet._
 
-#### debug  
-Toggle Debug - not really needed, but helpful to see messages between NLT and this app
 
-#### exit  
-Exits application.
 
 ## Clubs Using NLT Helper 
 Please let us know if you use this software - it helps me keep motivated :)

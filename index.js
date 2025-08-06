@@ -7,8 +7,9 @@ const { Table } = require("console-table-printer");
 const wav = require('wav');
 const Speaker = require('speaker');
 const {platform} = require("node:os");
+const { globSync} = require("glob");
 
-
+const configVersion = 1;
 let racers = {};
 let times = [];
 let lastLap = false;
@@ -17,7 +18,7 @@ let sPort = null;
 let socket = null;
 let hostSupportedEvents = [];
 const configFileLocation = './config.json';
-let config;// = fs.existsSync(configFileLocation)?JSON.parse(fs.readFileSync(configFileLocation)):{did : Math.random().toString(36).slice(2),classes:{}} ;
+let config, raceEvent;// = fs.existsSync(configFileLocation)?JSON.parse(fs.readFileSync(configFileLocation)):{did : Math.random().toString(36).slice(2),classes:{}} ;
 
 
 //***
@@ -27,6 +28,8 @@ loadConfig();
 speakUp(`NLT Helper`);
 SerialConnect();
 attemptSocketConnection();
+
+loadRaceEventFile();
 
 //***
 vorpal
@@ -105,38 +108,73 @@ vorpal
     });
 
 vorpal
-    .command("clearclasses", "Clear Class details")
+    .command("newevent <eventname...>", "Start a new event")
     .action(function(args, cb){
-        //config.classes={};
-        Object.keys(config.classes).map((className) => {
-            config.classes[className] = {fastest:{laptime:9999999999999}, results:[], finals:[]};
+          config.raceEventFile = './event_'+args.eventname.join('_').replace(/[^A-Za-z0-9_]]/g,'-');
+        raceEvent = {
+            name: args.eventname.join(' '),
+            classes: {}
+        };
+
+        config.defaultClasses.map((className) => {
+            raceEvent.classes[className] = {fastest:{laptime:9999999999999}, results:[], finals:[]};
         });
-        config.raceday=[];
+        raceEvent.raceday=[];
         writeConfig();
+        writeRaceEvent();
         cb();
     });
 
 vorpal
-    .command("removeclass <class>", "Remove a Class")
+    .command("loadevent <eventfile>", "Load a previous event")
+    .action(function(args, cb){
+           config.raceEventFile = './'+args.eventfile;
+        loadRaceEventFile();
+        cb();
+    })
+    .autocomplete({data: function(input, cb) {
+            let jsfiles = globSync('./event_*') || [];
+            cb(jsfiles);
+        }});
+
+vorpal
+    .command("clearclasses", "Clear Class details for the current Event")
+    .action(function(args, cb){
+        config.defaultClasses.map((className) => {
+            raceEvent.classes[className] = {fastest:{laptime:9999999999999}, results:[], finals:[]};
+        });
+        raceEvent.raceday=[];
+        writeRaceEvent();
+        cb();
+    });
+
+vorpal
+    .command("removeclass <class>", "Remove a Default Class")
     .types({
         string: ['class']
     })
     .autocomplete({data: function(input, cb) {
-            cb(Object.keys(config.classes));
+            cb(config.defaultClasses);
         }})
     .action(function(args, cb){
-        delete config.classes[args.class];
+        config.defaultClasses = config.defaultClasses.filter(className => className!==args.class);
         writeConfig();
         cb();
     });
 
 vorpal
-    .command("addclass <class>", "Add a Class")
+    .command("addclass <class>", "Add a Default Class (also adds it to the current Event)")
     .types({
         string: ['class']
     })
     .action(function(args, cb){
-        config.classes[args.class] = {fastest:{laptime:9999999999999}, results:[]};
+        if(config.defaultClasses.indexOf(args.class) === -1){
+            config.defaultClasses.push(args.class);
+        }
+        if(!raceEvent.classes[args.class]){
+            raceEvent.classes[args.class] = {fastest:{laptime:9999999999999}, results:[]};
+        }
+        writeRaceEvent();
         writeConfig();
         cb();
     });
@@ -172,7 +210,7 @@ vorpal
     })
     .autocomplete({data: function(input, cb,arg) {
             if(arg === 'class') {
-                cb(Object.keys(config.classes));
+                cb(Object.keys(raceEvent.classes));
             }else if(arg === 'heat') {
                 cb(["1","2","3","4","5","6"]);
             }else if(arg === 'group') {
@@ -182,7 +220,7 @@ vorpal
             }
     }})
     .action(function(args, cb) {
-        if(config.raceday
+        if(raceEvent.raceday
             .filter(race=>race.class===args.class
                 && race.group===(args.group||"") && race.heat===args.heat).length) {
             this.prompt({
@@ -194,13 +232,13 @@ vorpal
                 if (result.confirmDelete) {
                     // Add actual deletion logic here
                     this.log(`Deleting ${args.class}...`);
-                    config.raceday = config.raceday
+                    raceEvent.raceday = config.raceday
                         .filter(race=>race.class!==args.class
                             || race.group!==(args.group||"") || race.heat!==args.heat);
 
-                    config.classes[args.class].results = config.classes[args.class].results
+                    raceEvent.classes[args.class].results = raceEvent.classes[args.class].results
                         .filter(race => (race.group||"")!==(args.group||"") || race.heat!==args.heat);
-                    writeConfig();
+                    writeRaceEvent();
                 } else {
                     this.log(`Deletion of ${args.class} cancelled.`);
                 }
@@ -219,7 +257,7 @@ vorpal
     })
     .autocomplete({data: function(input, cb, arg) {
             if(arg === 'class') {
-                cb(Object.keys(config.classes));
+                cb(Object.keys(raceEvent.classes));
             }else if(arg === 'heat') {
                 cb(["1","2","3","4","5","6"]);
             }else if(arg === 'group') {
@@ -229,15 +267,15 @@ vorpal
             }
     }})
     .action(function(args, cb){
-        if(config.raceday
+        if(raceEvent.raceday
             .filter(race=>race.class===args.class
                 && race.group===(args.group||"") && race.heat===args.heat).length){
             this.log('This race has already been run');
-        }else if(!config.classes[args.class]){
-            this.log(`No Class: ${config.nextClass}`);
+        }else if(!raceEvent.classes[args.class]){
+            this.log(`No Class: ${arg.class}`);
         }else{
             //Display Line up
-            let raceList = config.classes[args.class].results.filter(res=>res.heat===args.heat-1 && res.group===(args.group||""));
+            let raceList = raceEvent.classes[args.class].results.filter(res=>res.heat===args.heat-1 && res.group===(args.group||""));
             raceList.sort(compareTimes);
             if(raceList.length > 0){
                 const p = new Table({
@@ -253,11 +291,11 @@ vorpal
                 p.printTable();
             }
 
-            config.nextClass = args.class;
-            config.nextGroup = args.group || '';
-            config.nextHeat = parseInt(args.heat,10);
-            sendSerialMessage(`Line Up: ${config.nextClass}${ config.nextGroup ? ' '+ config.nextGroup:'' }`);
-            if(!config.mute.lineup)speakUp(`${config.nextClass} class ${ config.nextGroup ? 'Group '+ config.nextGroup:'' } to line up for Heat ${config.nextHeat}`);
+            raceEvent.nextClass = args.class;
+            raceEvent.nextGroup = args.group || '';
+            raceEvent.nextHeat = parseInt(args.heat,10);
+            sendSerialMessage(`Line Up: ${raceEvent.nextClass}${ raceEvent.nextGroup ? ' '+ raceEvent.nextGroup:'' }`);
+            if(!config.mute.lineup)speakUp(`${raceEvent.nextClass} class ${ raceEvent.nextGroup ? 'Group '+ raceEvent.nextGroup:'' } to line up for Heat ${raceEvent.nextHeat}`);
 
         }
         cb();
@@ -270,14 +308,14 @@ vorpal
         string: ['class']
     })
     .autocomplete({data: function(input, cb) {
-            cb(Object.keys(config.classes));
+            cb(Object.keys(raceEvent.classes));
         }})
     .action(function(args, cb){
-        if(!config.classes[args.class]){
+        if(!raceEvent.classes[args.class]){
             cb();
             return;
         }
-        let {racers, heats}  = sortHeatResults(config.classes[args.class].results);
+        let {racers, heats}  = sortHeatResults(raceEvent.classes[args.class].results);
 
         let cols = [
             {
@@ -330,13 +368,13 @@ vorpal
 
         //******************** Finals Tables
         //Check if there are finals to run
-        let finalGroups = config.raceday
+        let finalGroups = raceEvent.raceday
             .filter(race=>race.class===args.class && race.final===1)
             .map(race=>race.group).filter(function(item, pos, self) {
-                return self.indexOf(item) == pos;
+                return self.indexOf(item) === pos;
             }) || [];
         finalGroups.map(group=>{
-            let res = sortHeatResults(config.classes[args.class].finals.filter(racer=>racer.group===group))
+            let res = sortHeatResults(raceEvent.classes[args.class].finals.filter(racer=>racer.group===group))
 
             this.log(`Finals for Group: ${group}`);
 
@@ -367,7 +405,7 @@ vorpal
                 columns: cols
             });
             pos = 1;
-            res.racers.map((racer,idx) => {
+            res.racers.map((racer) => {
                 let f =racer.heat[0];
                 let out = {group,
                     position: pos++,
@@ -383,7 +421,7 @@ vorpal
 
 
 
-        this.log(`Fastest Lap: ${config.classes[args.class].fastest.name} ${config.classes[args.class].fastest.laptime/1000} secs`);
+        this.log(`Fastest Lap: ${raceEvent.classes[args.class].fastest.name} ${raceEvent.classes[args.class].fastest.laptime/1000} secs`);
         cb();
     });
 
@@ -395,7 +433,7 @@ vorpal
     .autocomplete({data: function(input, cb, arg) {
         //  console.log(raw);
             if(arg === 'class') {
-                cb(Object.keys(config.classes));
+                cb(Object.keys(raceEvent.classes));
             }else if(arg === 'group') {
                 cb(["A","B","C","D","E","F"]);
             }else{
@@ -403,12 +441,12 @@ vorpal
             }
                 }})
     .action(function(args, cb){
-        if(!config.classes[args.class]){
-            this.log(`No Class: ${config.nextClass}`);
+        if(!raceEvent.classes[args.class]){
+            this.log(`No Class: ${arg.class}`);
         }else{
             //Display Line up
             let sliceStart = (args.group.charCodeAt(0)-65)*config.finalsplit;
-            let raceList = sortHeatResults(config.classes[args.class].results).racers.slice(sliceStart, sliceStart+config.finalsplit);
+            let raceList = sortHeatResults(raceEvent.classes[args.class].results).racers.slice(sliceStart, sliceStart+config.finalsplit);
             if(raceList.length > 0){
                 const p = new Table({
                     columns: [{
@@ -431,11 +469,11 @@ vorpal
             }
 
 
-            config.nextClass = args.class;
-            config.nextGroup = args.group || '';
-            config.nextFinal = 1;
-            sendSerialMessage(`Final: ${config.nextClass}${ config.nextGroup ? ' '+ config.nextGroup:'' }`);
-            if(!config.mute.lineup)speakUp(`${config.nextClass} class ${ config.nextGroup ? 'Group '+ config.nextGroup:'' } to line up for the Final`);
+            raceEvent.nextClass = args.class;
+            raceEvent.nextGroup = args.group || '';
+            raceEvent.nextFinal = 1;
+            sendSerialMessage(`Final: ${raceEvent.nextClass}${ raceEvent.nextGroup ? ' '+ raceEvent.nextGroup:'' }`);
+            if(!config.mute.lineup)speakUp(`${raceEvent.nextClass} class ${ raceEvent.nextGroup ? 'Group '+ raceEvent.nextGroup:'' } to line up for the Final`);
 
         }
         cb();
@@ -538,7 +576,7 @@ function attemptSocketConnection() {
 
         engine.on("close", (reason) => {
             hostSupportedEvents = [];
-            console.log("Connection closed\n");
+            console.log(`Connection closed - ${reason}\n`);
             sendSerialMessage("NLT Disconnect");
         });
     });
@@ -602,35 +640,35 @@ function attemptSocketConnection() {
                                     },8000);
                                 }
 
-                                if(config.nextClass){
-                                    if(config.nextHeat){
-                                        config.classes[config.nextClass].results.push(
+                                if(raceEvent.nextClass){
+                                    if(raceEvent.nextHeat){
+                                        raceEvent.classes[raceEvent.nextClass].results.push(
                                             ...winnerList
                                         );
 
-                                        config.raceday.push({
-                                            class:config.nextClass,
-                                            heat:config.nextHeat,
-                                            group:config.nextGroup
+                                        raceEvent.raceday.push({
+                                            class:raceEvent.nextClass,
+                                            heat:raceEvent.nextHeat,
+                                            group:raceEvent.nextGroup
                                         });
-                                        delete config.nextHeat;
+                                        delete raceEvent.nextHeat;
                                     }
-                                    if(config.nextFinal){
-                                        config.classes[config.nextClass].finals.push(
+                                    if(raceEvent.nextFinal){
+                                        raceEvent.classes[raceEvent.nextClass].finals.push(
                                             ...winnerList
                                         );
 
-                                        config.raceday.push({
-                                            class:config.nextClass,
-                                            final:config.nextFinal,
-                                            group:config.nextGroup
+                                        raceEvent.raceday.push({
+                                            class:raceEvent.nextClass,
+                                            final:raceEvent.nextFinal,
+                                            group:raceEvent.nextGroup
                                         });
-                                        delete config.nextFinal;
+                                        delete raceEvent.nextFinal;
                                     }
-                                    delete config.nextClass;
+                                    delete raceEvent.nextClass;
 
-                                    delete config.nextGroup;
-                                    writeConfig();
+                                    delete raceEvent.nextGroup;
+                                    writeRaceEvent();
                                 }
                                 break;
                             case 'racer_passed_gate':
@@ -674,13 +712,13 @@ function attemptSocketConnection() {
 
                                 if(!racers[message.transponder]){
                                     racers[message.transponder] = message;
-                                    if(config.nextHeat){
-                                        racers[message.transponder].heat = config.nextHeat;
-                                        racers[message.transponder].group = config.nextGroup;
+                                    if(raceEvent.nextHeat){
+                                        racers[message.transponder].heat = raceEvent.nextHeat;
+                                        racers[message.transponder].group = raceEvent.nextGroup;
                                     }
-                                    if(config.nextFinal){
-                                        racers[message.transponder].final = config.nextFinal;
-                                        racers[message.transponder].group = config.nextGroup;
+                                    if(raceEvent.nextFinal){
+                                        racers[message.transponder].final = raceEvent.nextFinal;
+                                        racers[message.transponder].group = raceEvent.nextGroup;
                                     }
                                 }else if(message.status === 'active'){
                                     racers[message.transponder].laptime = message.elapsed - racers[message.transponder].elapsed;
@@ -694,19 +732,19 @@ function attemptSocketConnection() {
                                     if(!lastLap){
                                         sendSerialMessage(times.join(' '), false);
                                     }
-                                    if(config.nextClass){
-                                        if(config.classes[config.nextClass].fastest.laptime > racers[message.transponder].laptime){
+                                    if(raceEvent.nextClass){
+                                        if(raceEvent.classes[raceEvent.nextClass].fastest.laptime > racers[message.transponder].laptime){
 
-                                            if(config.classes[config.nextClass].fastest.laptime !== 9999999999999){
-                                                if(!config.mute.fastestClass)speakUp(`${racers[message.transponder].name} has fastest lap of ${Number(racers[message.transponder].laptime/1000).toFixed(2)} seconds for ${config.nextClass} class!`);
+                                            if(raceEvent.classes[raceEvent.nextClass].fastest.laptime !== 9999999999999){
+                                                if(!config.mute.fastestClass)speakUp(`${racers[message.transponder].name} has fastest lap of ${Number(racers[message.transponder].laptime/1000).toFixed(2)} seconds for ${raceEvent.nextClass} class!`);
                                             }
 
-                                            config.classes[config.nextClass].fastest = {
+                                            raceEvent.classes[raceEvent.nextClass].fastest = {
                                                 laptime: racers[message.transponder].laptime,
                                                 name: racers[message.transponder].name
                                             }
                                         }
-                                        writeConfig();
+                                        writeRaceEvent();
                                     }
                                 }else if(message.status === 'complete'){
                                     racers[message.transponder].laptime = message.elapsed - racers[message.transponder].elapsed;
@@ -747,6 +785,7 @@ function sendSocketEvent(event) {
 
 function loadConfig(){
     let fConf = fs.existsSync(configFileLocation)?JSON.parse(fs.readFileSync(configFileLocation)):{};
+    const prevVer = fConf.version || 0;
     config = {
         did : Math.random().toString(36).slice(2),
         classes:{},
@@ -759,15 +798,42 @@ function loadConfig(){
         ...fConf
     };
 
-    for(let i in config.classes){
-        if(!config.classes[i].finals)
-            config.classes[i].finals = [];
+    if(prevVer === 0){
+        //Cleanup Classes
+        for(let i in config.classes){
+            if(!config.classes[i].finals)
+                config.classes[i].finals = [];
+        }
+
+        //let's move to version 1
+        config.defaultClasses = Object.keys(config.classes);
+        config.raceEventFile = "";
     }
 
+    config.version = configVersion;
+}
+
+function loadRaceEventFile(){
+    if(!config.raceEventFile){
+        console.log("No Race Event file found, cannot load RaceEventFile. Please use \"newevent\" command");
+        return;
+    }
+    let raceeventFile = fs.existsSync(config.raceEventFile)?fs.readFileSync(config.raceEventFile):null;
+    if(!raceeventFile){
+        console.log("Race Event File not Found. Please use \"newevent\" or \"loadevent\" command");
+        return
+    }
+
+    raceEvent = JSON.parse(raceeventFile);
+    console.log(`Loading Race Event file: ${raceEvent.name}`);
 }
 
 function writeConfig(){
     fs.writeFileSync(configFileLocation, JSON.stringify(config,2,2), {flag: 'w+'});
+}
+
+function writeRaceEvent(){
+    fs.writeFileSync(config.raceEventFile, JSON.stringify(raceEvent,2,2), {flag: 'w+'});
 }
 
 function sendSerialMessage(msg, showConsole = true){
@@ -779,10 +845,11 @@ function sortHeatResults(winnerList){
     let racers = {};
     let heats = {};
     winnerList.map(winner => {
-        if(!racers[winner.name]){
-            racers[winner.name] = {name: winner.name, heat:{},points:0};
+        let id = winner.name+winner.transponder;
+        if(!racers[id]){
+            racers[id] = {name: winner.name, id: id, heat:{},points:0};
         }
-        racers[winner.name].heat[winner.heat || 0] = {laps:winner.laps, elapsed:winner.elapsed};
+        racers[id].heat[winner.heat || 0] = {laps:winner.laps, elapsed:winner.elapsed};
 
         if(!heats[winner.heat || 0]){
             heats[winner.heat || 0] = [];
@@ -795,8 +862,9 @@ function sortHeatResults(winnerList){
 
         heats[heat].map((racer,idx)=>{
             //heats[heat][idx].points = pointsAmounts[idx] || 0;
-            racers[heats[heat][idx].name].points += config.points[idx]  || 0;
-            racers[heats[heat][idx].name].heat[heat].points = config.points[idx]  || 0;
+            let id = heats[heat][idx].name+heats[heat][idx].transponder;
+            racers[id].points += config.points[idx]  || 0;
+            racers[id].heat[heat].points = config.points[idx]  || 0;
         });
     })
 
