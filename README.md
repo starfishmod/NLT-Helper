@@ -38,14 +38,11 @@ Sets the ip to find NLT - defaults to 127.0.0.1
 #### port ```serial_port```        
 Sets the serial port for sending strings to display. Hitting Tab after the port will give you a list of ports.
 
-#### mute ```[countdown,fastestClass,lineup]```
+#### audio 
 Mute the audio for different NLT Events.
-* countdown - is the built-in countdown on start race
-* fastestClass - don't say the "fastest lap for xxx class" audio. This stops the ovelapping speech.
+* count down - is the built-in countdown on start race
+* fastest class - don't say the "fastest lap for xxx class" audio. This stops the ovelapping speech.
 * lineup - don't say the "Line Up for XXX class..."
-
-#### unmute ```[countdown,fastestClass,lineup]```
-Start using the audio again :)
 
 #### dropheats ```number_of_heats_to_drop```
 Amount of heat to drop the lowest points. e.g. ```dropHeats 2``` will drop the two lowest scoring heats.
@@ -85,8 +82,8 @@ Race Event creates a new race event file that can be reloaded. The last Race eve
 #### newevent ```Name of Event...```
 Creates a new race event ready to run the heats and finals.
 
-#### loadevent ```Name of Event...```
-Load a previous race event.
+#### loadevent 
+Load a previous race event from a list.
 
 #### clearclasses (deprecated - use newevent)
 Clear all class data - do this at the beginning of the Race day. This no 
@@ -122,6 +119,11 @@ m class  to line up for Heat 2
 #### removeheat ```class_name``` ```heat_number``` ```group(opt)```
 If a race goes bad, and you need to remove the data from NLT Helper. Use this so you can re-run.
 
+#### final ```class_name``` ```group(opt: A, B, C etc)```
+Like ```nextheat``` this sets the racing up for the final for each class and finals group.
+Rerun ```results``` to see the heats and finals for a class.
+_Note: multiple finals are not handled yet._
+
 #### results ```class_name```
 See a filtered list of best laps and times for the day for a class. Use this to set up the order for the finals.
 ```
@@ -142,10 +144,10 @@ Fastest Lap: demo-5 8.016 secs
 NLT Bridge> 
 ```
 
-#### final ```class_name``` ```group(opt: A, B, C etc)```
-Like ```nextheat``` this sets the racing up for the final for each class and finals group.
-Rerun ```results``` to see the heats and finals for a class.
-_Note: multiple finals are not handled yet._
+#### allresults
+See results for all classes.
+
+
 
 
 

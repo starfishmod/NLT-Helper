@@ -9,6 +9,8 @@ const Speaker = require('speaker');
 const {platform} = require("node:os");
 const { globSync} = require("glob");
 
+const writeXlsxFile = require('write-excel-file/node')
+
 const prompts = require('prompts');
 //prompts.override(require('yargs').argv);
 
@@ -381,6 +383,23 @@ vorpal
         }
         displayResults(args.class);
        cb();
+    });
+
+vorpal
+    .command("export <class>", "Detail overall position results for a class")
+    .types({
+        string: ['class']
+    })
+    .autocomplete({data: function(input, cb) {
+            cb(Object.keys(raceEvent.classes));
+        }})
+    .action(function(args, cb){
+        if(!raceEvent?.classes[args.class]){
+            cb();
+            return;
+        }
+        exportResults(args.class);
+        cb();
     });
 
 vorpal
@@ -921,7 +940,7 @@ function displayResults(className){
     finalGroups.map(group=>{
         let res = sortHeatResults(raceEvent.classes[className].finals.filter(racer=>racer.group===group))
 
-        this.log(`Finals for Group: ${group}`);
+        console.log(`Finals for Group: ${group}\n`);
 
         cols = [
             {
@@ -968,5 +987,124 @@ function displayResults(className){
 
     console.log(`Fastest Lap: ${raceEvent.classes[className].fastest.name} ${raceEvent.classes[className].fastest.laptime/1000} secs`);
 
+}
+
+function exportResults(className){
+    let schemas=[];
+    let dataArr=[];
+    let sheets=['Heats'];
+
+    let {racers, heats}  = sortHeatResults(raceEvent.classes[className].results);
+
+    let schema1 = [
+        {
+            value: racers=> racers.position,
+            type: String,
+            align: "center",
+            column: "POS"
+        },
+        {
+            value: racers=> racers.name,
+            align: "left",
+            column: "Name",
+        },
+        {
+            value: racers=> racers.points,
+            align: "center",
+            column: "Points",
+        }
+    ];
+
+    for(let heat in heats){
+        schema1.push({
+            value: racers=> racers[heat],
+            align: 'right',
+            column: `Heat ${heat}`,
+        });
+    }
+
+    schemas.push(schema1);
+
+    let data = [];
+    let pos = 1;
+    let fgroup = 1
+    racers.map((racer,idx) => {
+        let newGroup = (idx && !((idx+1) % config.finalsplit))
+        let out = { position: `${String.fromCharCode(fgroup+64)} ${pos++}`, name:racer.name, points: racer.points };
+        for(let heat in heats){
+            let f =racer.heat[heat];
+            out[heat] = f ? `${f.laps}/${convertMilliSecondToReadable(f.elapsed)}`:'--';
+        }
+        data.push(out);
+        if(newGroup) data.push({});
+        if(newGroup){
+            pos =1;
+            fgroup++;
+        }
+    });
+
+    dataArr.push(data);
+
+
+
+
+    //******************** Finals Tables
+    //Check if there are finals to run
+    let finalGroups = raceEvent.raceday
+        .filter(race=>race.class===className && race.final===1)
+        .map(race=>race.group).filter(function(item, pos, self) {
+            return self.indexOf(item) === pos;
+        }) || [];
+    finalGroups.map(group=>{
+        let res = sortHeatResults(raceEvent.classes[className].finals.filter(racer=>racer.group===group))
+
+        let schema2 = [
+            {
+                value: res=> res.group,
+                align: "center",
+                column: "Group"
+            },
+            {
+                value: res=> res.position,
+                align: "center",
+                column: "POS"
+            },
+            {
+                value: res=> res.name,
+                align: "left",
+                column: "Name",
+            },
+            {
+                value: res=> res.laptime,
+                align: "right",
+                column: "Lap/Time",
+            }
+        ];
+        schemas.push(schema2);
+
+        let data = [];
+        pos = 1;
+        res.racers.map((racer) => {
+            let f =racer.heat[0];
+            let out = {group,
+                position: pos++,
+                name:racer.name, laptime: `${f.laps}/${convertMilliSecondToReadable(f.elapsed)}` };
+
+            data.push(out);
+
+        });
+
+        dataArr.push(data);
+
+        sheets.push(`Finals Group ${group}`)
+    })
+
+    writeXlsxFile(dataArr, {
+        schema: schemas,
+        sheets: sheets,
+        filePath: `./export_${className}_${config.raceEventFile.replace('./','').replace(/^event_/,'')}.xlsx`
+    }).then(()=>{
+        console.log(`File Exported`);
+    });
 }
 
