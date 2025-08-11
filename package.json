@@ -12,13 +12,15 @@
     "console-table-printer": "^2.14.2",
     "glob": "^10.4.5",
     "node-wav-player": "^1.0.0",
+    "prompts": "^2.4.2",
     "say": "^0.16.0",
     "serialport": "^12.0.0",
     "socket.io-client": "^4.8.1",
     "sound-play": "^1.1.0",
     "speaker": "^0.5.5",
     "vorpal": "github:starfishmod/vorpal",
-    "wav": "^1.0.2"
+    "wav": "^1.0.2",
+    "yargs": "^18.0.0"
   },
   "pkg": {
     "scripts": [

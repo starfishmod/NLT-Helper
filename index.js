@@ -9,6 +9,9 @@ const Speaker = require('speaker');
 const {platform} = require("node:os");
 const { globSync} = require("glob");
 
+const prompts = require('prompts');
+//prompts.override(require('yargs').argv);
+
 const configVersion = 1;
 let racers = {};
 let times = [];
@@ -90,21 +93,40 @@ vorpal
     });
 
 vorpal
-    .command("mute <audio>", "Mute Audio features")
-    .autocomplete(['countdown','fastestClass','lineup'])
+    .command("audio", "Audio features")
     .action(function(args, cb){
-        config.mute[args.audio] = true;
-        writeConfig();
-        cb();
-    });
+        let jsfiles = globSync('./event_*') || [];
+        let choices = [{
+            title:'Countdown Announcement', value:'countdown'
+        },{
+            title:'Fastest in Class Announce', value:'fastestClass'
+        },{
+            title:'Line Up Announcement', value:'lineup'
+        }];
+        choices.map((choice) => {
+            if(!config.mute[choice.value]){
+                choice.selected = true;
+            }
+        })
 
-vorpal
-    .command("unmute <audio>", "Unmute Audio features")
-    .autocomplete(['countdown','fastestClass','lineup'])
-    .action(function(args, cb){
-        delete config.mute[args.audio];
-        writeConfig();
-        cb();
+        prompts([
+            {
+                type: 'multiselect',
+                name: 'audio',
+                message: 'Select Audio Option:',
+                choices: choices
+            }
+        ]).then((response) => {
+            const audioTypes = ['countdown','fastestClass','lineup'];
+            config.mute={};
+            audioTypes.map((type) => {
+                config.mute[type] = !!(response.audio.indexOf(type)===-1)
+            });
+            writeConfig();
+            cb();
+        }).catch((err) => {
+            cb();
+        });
     });
 
 vorpal
@@ -126,19 +148,37 @@ vorpal
     });
 
 vorpal
-    .command("loadevent <eventfile>", "Load a previous event")
+    .command("loadevent", "Load a previous event")
     .action(function(args, cb){
-           config.raceEventFile = './'+args.eventfile;
-        loadRaceEventFile();
-        cb();
-    })
-    .autocomplete({data: function(input, cb) {
-            let jsfiles = globSync('./event_*') || [];
-            cb(jsfiles);
-        }});
+        let jsfiles = globSync('./event_*') || [];
+        let choices = [];
+        jsfiles.map((file) => {
+            try {
+                let event = JSON.parse(fs.readFileSync(file));
+                choices.push({title:event.name, value:file});
+            }catch (e) {}
+        })
+
+        prompts([
+            {
+                type: 'select',
+                name: 'eventFile',
+                message: 'Select Event:',
+                choices: choices
+            }
+        ]).then((response) => {
+            //console.log(response);
+            config.raceEventFile = './'+response.eventFile;
+            loadRaceEventFile();
+            cb();
+        }).catch((err) => {
+            cb();
+        });
+    });
+
 
 vorpal
-    .command("clearclasses", "Clear Class details for the current Event")
+    .command("clearclasses", "Clear Class details for the current Event (deprecated)")
     .action(function(args, cb){
         config.defaultClasses.map((className) => {
             raceEvent.classes[className] = {fastest:{laptime:9999999999999}, results:[], finals:[]};
@@ -171,7 +211,7 @@ vorpal
         if(config.defaultClasses.indexOf(args.class) === -1){
             config.defaultClasses.push(args.class);
         }
-        if(!raceEvent.classes[args.class]){
+        if(raceEvent?.classes && !raceEvent.classes[args.class]){
             raceEvent.classes[args.class] = {fastest:{laptime:9999999999999}, results:[]};
         }
         writeRaceEvent();
@@ -209,6 +249,10 @@ vorpal
         string: ['class','group']//,  integer: ['heat']
     })
     .autocomplete({data: function(input, cb,arg) {
+            if(!raceEvent?.classes){
+                cb();
+                return;
+            }
             if(arg === 'class') {
                 cb(Object.keys(raceEvent.classes));
             }else if(arg === 'heat') {
@@ -267,6 +311,10 @@ vorpal
             }
     }})
     .action(function(args, cb){
+        if(!raceEvent?.classes){
+            cb();
+            return;
+        }
         if(raceEvent.raceday
             .filter(race=>race.class===args.class
                 && race.group===(args.group||"") && race.heat===args.heat).length){
@@ -301,6 +349,22 @@ vorpal
         cb();
     });
 
+vorpal
+    .command("allresults", "Detail results for all classes")
+    .action(function(args, cb){
+        if(!raceEvent?.classes){
+            cb();
+            return;
+        }
+        Object.keys(raceEvent.classes).map(className=>{
+            this.log(`${className} Results`);
+
+            displayResults(className);
+            this.log(`=============================================`);
+        });
+
+        cb();
+    });
 
 vorpal
     .command("results <class>", "Detail overall position results for a class")
@@ -311,118 +375,12 @@ vorpal
             cb(Object.keys(raceEvent.classes));
         }})
     .action(function(args, cb){
-        if(!raceEvent.classes[args.class]){
+        if(!raceEvent?.classes[args.class]){
             cb();
             return;
         }
-        let {racers, heats}  = sortHeatResults(raceEvent.classes[args.class].results);
-
-        let cols = [
-            {
-                name: "position",
-                alignment: "center",
-                title: "POS"
-            },
-            {
-                name: "name",
-                alignment: "left",
-                title: "Name",
-            },
-            {
-                name: "points",
-                alignment: "center",
-                title: "Points",
-            }
-        ];
-
-        for(let heat in heats){
-            cols.push({
-                name: heat,
-                alignment: 'right',
-                title: `Heat ${heat}`,
-            });
-        }
-
-        const p = new Table({
-            columns: cols
-        });
-
-        let pos = 1;
-        let fgroup = 1
-        racers.map((racer,idx) => {
-            let newGroup = (idx && !((idx+1) % config.finalsplit))
-            let out = { position: `${String.fromCharCode(fgroup+64)} ${pos++}`, name:racer.name, points: racer.points };
-            for(let heat in heats){
-                let f =racer.heat[heat];
-                out[heat] = f ? `${f.laps}/${convertMilliSecondToReadable(f.elapsed)}`:'--';
-            }
-            p.addRow(out,{separator: newGroup});
-            if(newGroup){
-                pos =1;
-                fgroup++;
-            }
-        });
-
-
-        p.printTable();
-
-        //******************** Finals Tables
-        //Check if there are finals to run
-        let finalGroups = raceEvent.raceday
-            .filter(race=>race.class===args.class && race.final===1)
-            .map(race=>race.group).filter(function(item, pos, self) {
-                return self.indexOf(item) === pos;
-            }) || [];
-        finalGroups.map(group=>{
-            let res = sortHeatResults(raceEvent.classes[args.class].finals.filter(racer=>racer.group===group))
-
-            this.log(`Finals for Group: ${group}`);
-
-            cols = [
-                {
-                    name: "group",
-                    alignment: "center",
-                    title: "Group"
-                },
-                {
-                    name: "position",
-                    alignment: "center",
-                    title: "POS"
-                },
-                {
-                    name: "name",
-                    alignment: "left",
-                    title: "Name",
-                },
-                {
-                    name: "laptime",
-                    alignment: "right",
-                    title: "Lap/Time",
-                }
-            ];
-
-            const pf = new Table({
-                columns: cols
-            });
-            pos = 1;
-            res.racers.map((racer) => {
-                let f =racer.heat[0];
-                let out = {group,
-                    position: pos++,
-                    name:racer.name, laptime: `${f.laps}/${convertMilliSecondToReadable(f.elapsed)}` };
-
-                pf.addRow(out,{separator: 0});
-
-            });
-
-            pf.printTable();
-        })
-
-
-
-
-        this.log(`Fastest Lap: ${raceEvent.classes[args.class].fastest.name} ${raceEvent.classes[args.class].fastest.laptime/1000} secs`);
-        cb();
+        displayResults(args.class);
+       cb();
     });
 
 vorpal
@@ -431,7 +389,10 @@ vorpal
         string: ['class']//,  integer: ['heat']
     })
     .autocomplete({data: function(input, cb, arg) {
-        //  console.log(raw);
+            if(!raceEvent?.classes){
+                cb();
+                return;
+            }
             if(arg === 'class') {
                 cb(Object.keys(raceEvent.classes));
             }else if(arg === 'group') {
@@ -896,5 +857,116 @@ function sortHeatResults(winnerList){
 
     });
     return {racers,heats};
+}
+
+function displayResults(className){
+    let {racers, heats}  = sortHeatResults(raceEvent.classes[className].results);
+
+    let cols = [
+        {
+            name: "position",
+            alignment: "center",
+            title: "POS"
+        },
+        {
+            name: "name",
+            alignment: "left",
+            title: "Name",
+        },
+        {
+            name: "points",
+            alignment: "center",
+            title: "Points",
+        }
+    ];
+
+    for(let heat in heats){
+        cols.push({
+            name: heat,
+            alignment: 'right',
+            title: `Heat ${heat}`,
+        });
+    }
+
+    const p = new Table({
+        columns: cols
+    });
+
+    let pos = 1;
+    let fgroup = 1
+    racers.map((racer,idx) => {
+        let newGroup = (idx && !((idx+1) % config.finalsplit))
+        let out = { position: `${String.fromCharCode(fgroup+64)} ${pos++}`, name:racer.name, points: racer.points };
+        for(let heat in heats){
+            let f =racer.heat[heat];
+            out[heat] = f ? `${f.laps}/${convertMilliSecondToReadable(f.elapsed)}`:'--';
+        }
+        p.addRow(out,{separator: newGroup});
+        if(newGroup){
+            pos =1;
+            fgroup++;
+        }
+    });
+
+
+    p.printTable();
+
+    //******************** Finals Tables
+    //Check if there are finals to run
+    let finalGroups = raceEvent.raceday
+        .filter(race=>race.class===className && race.final===1)
+        .map(race=>race.group).filter(function(item, pos, self) {
+            return self.indexOf(item) === pos;
+        }) || [];
+    finalGroups.map(group=>{
+        let res = sortHeatResults(raceEvent.classes[className].finals.filter(racer=>racer.group===group))
+
+        this.log(`Finals for Group: ${group}`);
+
+        cols = [
+            {
+                name: "group",
+                alignment: "center",
+                title: "Group"
+            },
+            {
+                name: "position",
+                alignment: "center",
+                title: "POS"
+            },
+            {
+                name: "name",
+                alignment: "left",
+                title: "Name",
+            },
+            {
+                name: "laptime",
+                alignment: "right",
+                title: "Lap/Time",
+            }
+        ];
+
+        const pf = new Table({
+            columns: cols
+        });
+        pos = 1;
+        res.racers.map((racer) => {
+            let f =racer.heat[0];
+            let out = {group,
+                position: pos++,
+                name:racer.name, laptime: `${f.laps}/${convertMilliSecondToReadable(f.elapsed)}` };
+
+            pf.addRow(out,{separator: 0});
+
+        });
+
+        pf.printTable();
+    })
+
+
+
+
+    console.log(`Fastest Lap: ${raceEvent.classes[className].fastest.name} ${raceEvent.classes[className].fastest.laptime/1000} secs`);
+
 }
 
