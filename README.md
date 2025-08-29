@@ -55,8 +55,8 @@ NLT Bridge> points 20 18 17 16 15 14 13 12 11 10 9 8 7 6 5 4 3 2 1
 ```
 The above sets 1st place to have 20 points, 2nd is 18 points etc. for each heat.
 
-#### splitfinals ```number_of_racers_in_each_final_group```
-The amount of racers in each final group. This provides a one or more splits as seen in the results for a class.
+#### splitfinals ```number_of_final_groups``` ```class(opt)```
+The amount of final groups in each class. This provides a one or more splits as seen in the results for a class.
 
 #### addclass ```new_class_name```
 Adds a new Default Class. These default classes are added to any new Race Event.
@@ -146,6 +146,9 @@ NLT Bridge>
 
 #### allresults
 See results for all classes.
+
+#### export ```class```
+Export the result for a class. This will be exported as an XLSX file in the same directory as the app.
 
 
 

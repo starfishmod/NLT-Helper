@@ -1143,12 +1143,13 @@ function exportResults(className){
         sheets.push(`Finals Group ${group}`)
     })
 
+    const filename = `./export_${className}_${config.raceEventFile.replace('./','').replace(/^event_/,'')}.xlsx`;
     writeXlsxFile(dataArr, {
         schema: schemas,
         sheets: sheets,
-        filePath: `./export_${className}_${config.raceEventFile.replace('./','').replace(/^event_/,'')}.xlsx`
+        filePath: filename
     }).then(()=>{
-        console.log(`File Exported`);
+        console.log(`File Exported: ${filename}`);
     });
 }
 
