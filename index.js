@@ -214,7 +214,7 @@ vorpal
             config.defaultClasses[args.class]={};
         }
         if(raceEvent?.classes && !raceEvent.classes[args.class]){
-            raceEvent.classes[args.class] = {fastest:{laptime:9999999999999}, results:[]};
+            raceEvent.classes[args.class] = {fastest:{laptime:9999999999999}, results:[],finals:[]};
         }
         writeRaceEvent();
         writeConfig();
@@ -240,7 +240,7 @@ vorpal
 vorpal
     .command("splitfinals <finalsplit> [class]", "Split each finals into groups.")
     .types({
-        integer: ['finalsplit'],
+        //integer: ['finalsplit'],
         string: ['class']
     })
     .autocomplete({data: function(input, cb,arg) {
@@ -255,16 +255,18 @@ vorpal
         }})
     .action(function(args, cb){
         if(args.class){
-            if(!config.defaultClasses[args.class]){
+            if(!raceEvent.classes[args.class]){
                 this.log("No Class with that name")
                 cb();
                 return;
             }
-            config.defaultClasses[args.class].splits = args.finalsplit;
+            raceEvent.classes[args.class].split = args.finalsplit;
+            writeRaceEvent();
         }else {
-            config.finalsplit = args.finalsplit;
+            config.finalGroupSplit = args.finalsplit;
+            writeConfig();
         }
-        writeConfig();
+
         cb();
     });
 
@@ -438,7 +440,8 @@ vorpal
             if(arg === 'class') {
                 cb(Object.keys(raceEvent.classes));
             }else if(arg === 'group') {
-                cb(["A","B","C","D","E","F"]);
+               // let spf = (raceEvent.classes[args.class]?.split || config.finalGroupSplit);
+                cb(["A","B","C","D","E","F"]/*.slice(0,spf)*/);
             }else{
                 cb([]);
             }
@@ -448,8 +451,10 @@ vorpal
             this.log(`No Class: ${arg.class}`);
         }else{
             //Display Line up
-            let sliceStart = (args.group.charCodeAt(0)-65)*config.finalsplit;
-            let raceList = sortHeatResults(raceEvent.classes[args.class].results).racers.slice(sliceStart, sliceStart+config.finalsplit);
+            let {racers, heats}  = sortHeatResults(raceEvent.classes[args.class].results);
+            let finalSplit = Math.ceil(racers.length / (raceEvent.classes[args.class]?.split || config.finalGroupSplit));
+            let sliceStart = (args.group.charCodeAt(0)-65)*finalSplit;
+            let raceList = racers.slice(sliceStart, sliceStart+finalSplit);
             if(raceList.length > 0){
                 const p = new Table({
                     columns: [{
@@ -912,6 +917,10 @@ function sortHeatResults(winnerList){
 
 function displayResults(className){
     let {racers, heats}  = sortHeatResults(raceEvent.classes[className].results);
+    if(!racers.length){
+        console.log("No results found.");
+        return;
+    }
 
     let cols = [
         {
@@ -945,9 +954,9 @@ function displayResults(className){
 
     let pos = 1;
     let fgroup = 1
-    let finalSplit = Math.ceil(racers.length / (config.defaultClasses[className].split || config.finalGroupSplit));
+    let finalSplit = Math.ceil(racers.length / (raceEvent.classes[className]?.split || config.finalGroupSplit));
     racers.map((racer,idx) => {
-        let newGroup = (idx && !((idx+1) % finalsplit))
+        let newGroup = (idx && !((idx+1) % finalSplit))
         let out = { position: `${String.fromCharCode(fgroup+64)} ${pos++}`, name:racer.name, points: racer.points };
         for(let heat in heats){
             let f =racer.heat[heat];
@@ -1061,10 +1070,10 @@ function exportResults(className){
     let data = [];
     let pos = 1;
     let fgroup = 1
-    let finalSplit = Math.ceil(racers.length / (config.defaultClasses[className].split || config.finalGroupSplit));
+    let finalSplit = Math.ceil(racers.length / (raceEvent.classes[className]?.split || config.finalGroupSplit));
 
     racers.map((racer,idx) => {
-        let newGroup = (idx && !((idx+1) % finalsplit))
+        let newGroup = (idx && !((idx+1) % finalSplit))
         let out = { position: `${String.fromCharCode(fgroup+64)} ${pos++}`, name:racer.name, points: racer.points };
         for(let heat in heats){
             let f =racer.heat[heat];
