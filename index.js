@@ -14,7 +14,7 @@ const writeXlsxFile = require('write-excel-file/node')
 const prompts = require('prompts');
 //prompts.override(require('yargs').argv);
 
-const configVersion = 1;
+const configVersion = 2;
 let racers = {};
 let times = [];
 let lastLap = false;
@@ -140,7 +140,7 @@ vorpal
             classes: {}
         };
 
-        config.defaultClasses.map((className) => {
+        Object.keys(config.defaultClasses).map((className) => {
             raceEvent.classes[className] = {fastest:{laptime:9999999999999}, results:[], finals:[]};
         });
         raceEvent.raceday=[];
@@ -182,7 +182,7 @@ vorpal
 vorpal
     .command("clearclasses", "Clear Class details for the current Event (deprecated)")
     .action(function(args, cb){
-        config.defaultClasses.map((className) => {
+        Object.keys(config.defaultClasses).map((className) => {
             raceEvent.classes[className] = {fastest:{laptime:9999999999999}, results:[], finals:[]};
         });
         raceEvent.raceday=[];
@@ -196,10 +196,10 @@ vorpal
         string: ['class']
     })
     .autocomplete({data: function(input, cb) {
-            cb(config.defaultClasses);
+            cb(cObject.keys(config.defaultClasses));
         }})
     .action(function(args, cb){
-        config.defaultClasses = config.defaultClasses.filter(className => className!==args.class);
+        delete config.defaultClasses[args.class];
         writeConfig();
         cb();
     });
@@ -210,8 +210,8 @@ vorpal
         string: ['class']
     })
     .action(function(args, cb){
-        if(config.defaultClasses.indexOf(args.class) === -1){
-            config.defaultClasses.push(args.class);
+        if(config.defaultClasses[args.class] === undefined){
+            config.defaultClasses[args.class]={};
         }
         if(raceEvent?.classes && !raceEvent.classes[args.class]){
             raceEvent.classes[args.class] = {fastest:{laptime:9999999999999}, results:[]};
@@ -238,9 +238,32 @@ vorpal
     });
 
 vorpal
-    .command("splitfinals <finalsplit>", "Split each finals into groups.")
+    .command("splitfinals <finalsplit> [class]", "Split each finals into groups.")
+    .types({
+        integer: ['finalsplit'],
+        string: ['class']
+    })
+    .autocomplete({data: function(input, cb,arg) {
+            if(arg === 'class') {
+                cb(Object.keys(config.defaultClasses));
+            }else if(arg === 'finalsplit') {
+                cb(["1","2","3","4","5","6"]);
+            }
+            else{
+                cb();
+            }
+        }})
     .action(function(args, cb){
-        config.finalsplit = args.finalsplit;
+        if(args.class){
+            if(!config.defaultClasses[args.class]){
+                this.log("No Class with that name")
+                cb();
+                return;
+            }
+            config.defaultClasses[args.class].splits = args.finalsplit;
+        }else {
+            config.finalsplit = args.finalsplit;
+        }
         writeConfig();
         cb();
     });
@@ -765,7 +788,7 @@ function sendSocketEvent(event) {
 
 function loadConfig(){
     let fConf = fs.existsSync(configFileLocation)?JSON.parse(fs.readFileSync(configFileLocation)):{};
-    const prevVer = fConf.version || 0;
+    let prevVer = fConf.version || 0;
     config = {
         did : Math.random().toString(36).slice(2),
         classes:{},
@@ -773,7 +796,8 @@ function loadConfig(){
         debug: false,
         raceday:[],
         mute:{},
-        finalsplit:8,
+        //finalsplit:8,
+        finalGroupSplit:1,
         points:[10,8,7,6,5,4,3,2,1],
         ...fConf
     };
@@ -788,6 +812,14 @@ function loadConfig(){
         //let's move to version 1
         config.defaultClasses = Object.keys(config.classes);
         config.raceEventFile = "";
+        prevVer = 1;
+    }
+
+    if(prevVer === 1){
+        //Cleanup Classes
+        let dClass = {};
+        config.defaultClasses.map(classN=>{dClass[classN]={};});
+        config.defaultClasses = dClass;
     }
 
     config.version = configVersion;
@@ -913,8 +945,9 @@ function displayResults(className){
 
     let pos = 1;
     let fgroup = 1
+    let finalSplit = Math.ceil(racers.length / (config.defaultClasses[className].split || config.finalGroupSplit));
     racers.map((racer,idx) => {
-        let newGroup = (idx && !((idx+1) % config.finalsplit))
+        let newGroup = (idx && !((idx+1) % finalsplit))
         let out = { position: `${String.fromCharCode(fgroup+64)} ${pos++}`, name:racer.name, points: racer.points };
         for(let heat in heats){
             let f =racer.heat[heat];
@@ -1028,8 +1061,10 @@ function exportResults(className){
     let data = [];
     let pos = 1;
     let fgroup = 1
+    let finalSplit = Math.ceil(racers.length / (config.defaultClasses[className].split || config.finalGroupSplit));
+
     racers.map((racer,idx) => {
-        let newGroup = (idx && !((idx+1) % config.finalsplit))
+        let newGroup = (idx && !((idx+1) % finalsplit))
         let out = { position: `${String.fromCharCode(fgroup+64)} ${pos++}`, name:racer.name, points: racer.points };
         for(let heat in heats){
             let f =racer.heat[heat];
