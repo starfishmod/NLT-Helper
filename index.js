@@ -14,7 +14,7 @@ const writeXlsxFile = require('write-excel-file/node')
 const prompts = require('prompts');
 //prompts.override(require('yargs').argv);
 
-const configVersion = 2;
+const configVersion = 3;
 let racers = {};
 let times = [];
 let lastLap = false;
@@ -141,7 +141,7 @@ vorpal
         };
 
         Object.keys(config.defaultClasses).map((className) => {
-            raceEvent.classes[className] = {fastest:{laptime:9999999999999}, results:[], finals:[]};
+            raceEvent.classes[className] = cleanClass();
         });
         raceEvent.raceday=[];
         writeConfig();
@@ -171,6 +171,7 @@ vorpal
         ]).then((response) => {
             //console.log(response);
             config.raceEventFile = './'+response.eventFile;
+            writeConfig();
             loadRaceEventFile();
             cb();
         }).catch((err) => {
@@ -183,7 +184,7 @@ vorpal
     .command("clearclasses", "Clear Class details for the current Event (deprecated)")
     .action(function(args, cb){
         Object.keys(config.defaultClasses).map((className) => {
-            raceEvent.classes[className] = {fastest:{laptime:9999999999999}, results:[], finals:[]};
+            raceEvent.classes[className] = cleanClass();
         });
         raceEvent.raceday=[];
         writeRaceEvent();
@@ -214,7 +215,7 @@ vorpal
             config.defaultClasses[args.class]={};
         }
         if(raceEvent?.classes && !raceEvent.classes[args.class]){
-            raceEvent.classes[args.class] = {fastest:{laptime:9999999999999}, results:[],finals:[]};
+            raceEvent.classes[args.class] = cleanClass();
         }
         writeRaceEvent();
         writeConfig();
@@ -487,6 +488,77 @@ vorpal
         cb();
     });
 
+
+vorpal
+    .command("mergeuser <class>", "Merge user results for a class")
+    .types({
+        string: ['class']//,  integer: ['heat']
+    })
+    .autocomplete({data: function(input, cb, arg) {
+        cb(Object.keys(raceEvent.classes));
+        }})
+    .action(function(args, cb){
+        if(!raceEvent.classes[args.class]){
+            this.log(`No Class: ${arg.class}`);
+            cb();
+            return;
+        }
+
+
+        let choices = {};
+        raceEvent.classes[args.class].results.map((r) => {
+            let id = `${r.transponder}:${r.name}`;
+            if(!choices[id]){
+                choices[id] = {title:id, value:id};
+            }
+        });
+
+        raceEvent.classes[args.class].finals.map((r) => {
+            let id = `${r.transponder}:${r.name}`;
+            if(!choices[id]){
+                choices[id] = {title:id, value:id};
+            }
+        });
+
+        prompts([
+            {
+                type: 'select',
+                name: 'id',
+                message: 'Select User Merge:',
+                choices: Object.values(choices)
+            },
+            {
+                type: 'select',
+                name: 'id2',
+                message: 'Select User Merge into:',
+                choices: Object.values(choices)
+            }
+        ]).then((response) => {
+                let [newtransponder, newname] = response.id2.split(':');
+                raceEvent.classes[args.class].results.map((r) => {
+                    let id =`${r.transponder}:${r.name}`;
+                    if(id === response.id){
+                       r.name=newname;
+                       r.transponder=newtransponder;
+                    }
+                });
+
+                raceEvent.classes[args.class].finals.map((r) => {
+                    let id = `${r.transponder}:${r.name}`;
+                    if(id === response.id){
+                        r.name=newname;
+                        r.transponder=newtransponder;
+                    }
+                });
+                writeRaceEvent();
+                cb();
+
+        }).catch((err) => {
+            cb();
+        });
+
+    });
+
 //**
 
 function compareTimes(a,b) {
@@ -728,36 +800,61 @@ function attemptSocketConnection() {
                                         racers[message.transponder].final = raceEvent.nextFinal;
                                         racers[message.transponder].group = raceEvent.nextGroup;
                                     }
-                                }else if(message.status === 'active'){
+                                }
+
+                                if(message.status === 'active'){
                                     racers[message.transponder].laptime = message.elapsed - racers[message.transponder].elapsed;
                                     racers[message.transponder].elapsed = message.elapsed;
                                     racers[message.transponder].laps = message.laps;
                                     racers[message.transponder].fast_lap = message.fast_lap;
 
-                                    let time = Number(racers[message.transponder].laptime/1000).toFixed(2);
-                                    times.unshift(time);
-                                    times = times.slice(0,3)
-                                    if(!lastLap){
-                                        sendSerialMessage(times.join(' '), false);
-                                    }
-                                    if(raceEvent.nextClass){
-                                        if(raceEvent.classes[raceEvent.nextClass].fastest.laptime > racers[message.transponder].laptime){
 
-                                            if(raceEvent.classes[raceEvent.nextClass].fastest.laptime !== 9999999999999){
-                                                if(!config.mute.fastestClass)speakUp(`${racers[message.transponder].name} has fastest lap of ${Number(racers[message.transponder].laptime/1000).toFixed(2)} seconds for ${raceEvent.nextClass} class!`);
-                                            }
-
-                                            raceEvent.classes[raceEvent.nextClass].fastest = {
-                                                laptime: racers[message.transponder].laptime,
-                                                name: racers[message.transponder].name
-                                            }
-                                        }
-                                        writeRaceEvent();
-                                    }
                                 }else if(message.status === 'complete'){
                                     racers[message.transponder].laptime = message.elapsed - racers[message.transponder].elapsed;
                                     racers[message.transponder].elapsed = message.elapsed;
                                     racers[message.transponder].laps = message.laps;
+                                }
+
+
+                                let time = Number(racers[message.transponder].laptime/1000).toFixed(2);
+                                times.unshift(time);
+                                times = times.slice(0,3)
+                                if(!lastLap){
+                                    sendSerialMessage(times.join(' '), false);
+                                }
+
+                                if(raceEvent.nextClass && racers[message.transponder].laptime){
+                                    if(raceEvent.classes[raceEvent.nextClass].fastest[0].laptime > racers[message.transponder].laptime){
+
+                                        if(raceEvent.classes[raceEvent.nextClass].fastest[0].laptime !== 9999999999999){
+                                            if(!config.mute.fastestClass)speakUp(`${racers[message.transponder].name} has fastest lap of ${Number(racers[message.transponder].laptime/1000).toFixed(2)} seconds for ${raceEvent.nextClass} class!`);
+                                        }
+
+                                        raceEvent.classes[raceEvent.nextClass].fastest.unshift({
+                                            laptime: racers[message.transponder].laptime,
+                                            name: racers[message.transponder].name,
+                                            detail: `${raceEvent.nextHeat?'Heat '+ raceEvent.nextHeat:'Final'} ${raceEvent.nextGroup?'Group '+raceEvent.nextGroup:''}`
+                                        });
+                                    }
+
+                                    let id = `${message.transponder}:${message.name}`;
+                                    if(raceEvent.nextHeat &&
+                                        (
+                                            !raceEvent.classes[raceEvent.nextClass].userFastestHeat[id]
+                                        || raceEvent.classes[raceEvent.nextClass].userFastestHeat[id] > racers[message.transponder].laptime
+                                        )
+                                        ){
+                                        raceEvent.classes[raceEvent.nextClass].userFastestHeat[id] =  racers[message.transponder].laptime;
+                                    }
+                                    if(raceEvent.nextFinal &&
+                                        (
+                                            !raceEvent.classes[raceEvent.nextClass].userFastestFinal[id]
+                                            || raceEvent.classes[raceEvent.nextClass].userFastestFinal[id] > racers[message.transponder].laptime
+                                        )
+                                    ){
+                                        raceEvent.classes[raceEvent.nextClass].userFastestFinal[id] =  racers[message.transponder].laptime;
+                                    }
+                                    //writeRaceEvent();
                                 }
                                 break;
                         }
@@ -842,6 +939,9 @@ function loadRaceEventFile(){
     }
 
     raceEvent = JSON.parse(raceeventFile);
+
+
+
     console.log(`Loading Race Event file: ${raceEvent.name}`);
 }
 
@@ -862,7 +962,7 @@ function sortHeatResults(winnerList){
     let racers = {};
     let heats = {};
     winnerList.map(winner => {
-        let id = winner.name+winner.transponder;
+        let id = `${winner.transponder}:${winner.name}`;
         if(!racers[id]){
             racers[id] = {name: winner.name, id: id, heat:{},points:0};
         }
@@ -879,7 +979,7 @@ function sortHeatResults(winnerList){
 
         heats[heat].map((racer,idx)=>{
             //heats[heat][idx].points = pointsAmounts[idx] || 0;
-            let id = heats[heat][idx].name+heats[heat][idx].transponder;
+            let id = `${heats[heat][idx].transponder}:${heats[heat][idx].name}` ;
             racers[id].points += config.points[idx]  || 0;
             racers[id].heat[heat].points = config.points[idx]  || 0;
         });
@@ -948,6 +1048,13 @@ function displayResults(className){
         });
     }
 
+    cols.push({
+        name: 'fhlt',
+        alignment: 'right',
+        title: `Fastest Heat Lap Time`,
+    });
+
+
     const p = new Table({
         columns: cols
     });
@@ -956,8 +1063,14 @@ function displayResults(className){
     let fgroup = 1
     let finalSplit = Math.ceil(racers.length / (raceEvent.classes[className]?.split || config.finalGroupSplit));
     racers.map((racer,idx) => {
-        let newGroup = (idx && !((idx+1) % finalSplit))
-        let out = { position: `${String.fromCharCode(fgroup+64)} ${pos++}`, name:racer.name, points: racer.points };
+        let newGroup = (idx && !((idx+1) % finalSplit));
+        //let id = `${racer.transponder}:${racer.name}`;
+        let out = {
+            position: `${String.fromCharCode(fgroup+64)} ${pos++}`,
+            name:racer.name,
+            points: racer.points,
+            fhlt: convertMilliSecondToReadable(raceEvent.classes[className].userFastestHeat?.[racer.id]) || '--'
+        };
         for(let heat in heats){
             let f =racer.heat[heat];
             out[heat] = f ? `${f.laps}/${convertMilliSecondToReadable(f.elapsed)}`:'--';
@@ -1004,6 +1117,11 @@ function displayResults(className){
                 name: "laptime",
                 alignment: "right",
                 title: "Lap/Time",
+            },
+            {
+                name: 'fhlt',
+                alignment: 'right',
+                title: `Fastest Lap Time`,
             }
         ];
 
@@ -1015,7 +1133,10 @@ function displayResults(className){
             let f =racer.heat[0];
             let out = {group,
                 position: pos++,
-                name:racer.name, laptime: `${f.laps}/${convertMilliSecondToReadable(f.elapsed)}` };
+                name:racer.name,
+                laptime: `${f.laps}/${convertMilliSecondToReadable(f.elapsed)}`,
+                fhlt: raceEvent.classes[className].userFastestFinal?.[racer.id] || ''
+            };
 
             pf.addRow(out,{separator: 0});
 
@@ -1025,9 +1146,17 @@ function displayResults(className){
     })
 
 
+    let ft = raceEvent.classes[className].fastest;
+    if(!Array.isArray(ft)){
+        ft = [ft,{}];
+    }
+
+    console.log(`Fastest Laps:`);
+    ft.slice(0,-1).map(ftim=>{
+        console.log(` * ${ftim.name} ${ftim.laptime/1000} secs in ${ftim.detail}`);
+    })
 
 
-    console.log(`Fastest Lap: ${raceEvent.classes[className].fastest.name} ${raceEvent.classes[className].fastest.laptime/1000} secs`);
 
 }
 
@@ -1151,5 +1280,15 @@ function exportResults(className){
     }).then(()=>{
         console.log(`File Exported: ${filename}`);
     });
+}
+
+function cleanClass(){
+    return {
+        fastest:[{laptime:9999999999999}],
+        userFastestHeat:{},
+        userFastestFinal:{},
+        results:[],
+        finals:[]
+    };
 }
 
