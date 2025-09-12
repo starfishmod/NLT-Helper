@@ -378,6 +378,78 @@ vorpal
     });
 
 vorpal
+    .command("adjustheat <class> <heat> [group]", "Adjust a User result for a race")
+    .types({
+        string: ['class','group']//,  integer: ['heat']
+    })
+    .autocomplete({data: function(input, cb, arg) {
+            if(arg === 'class') {
+                cb(Object.keys(raceEvent.classes));
+            }else if(arg === 'heat') {
+                cb(["1","2","3","4","5","6"]);
+            }else if(arg === 'group') {
+                cb(["A","B","C","D","E","F"]);
+            }else{
+                cb([]);
+            }
+        }})
+    .action(function(args, cb) {
+        if (!raceEvent?.classes) {
+            cb();
+            return;
+        }
+
+        let heat = raceEvent.raceday
+            .filter(race => race.class === args.class
+                && race.group === (args.group || "") && race.heat === args.heat);
+
+        if (!heat.length) {
+            this.log('This race has not been run');
+            cb();
+        }
+        //Found the race...
+        let choices = {};
+        raceEvent.classes[args.class].results.map((r) => {
+            let id = `${r.transponder}:${r.name}`;
+            if(!choices[id]){
+                choices[id] = {title:id, value:id};
+            }
+        });
+        prompts([
+            {
+                type: 'select',
+                name: 'id',
+                message: 'Select User to Alter:',
+                choices: Object.values(choices)
+            },
+            {
+                type: 'number',
+                name: 'alterlap',
+                initial: 0,
+                message: 'How Many lap to add/remove?:'
+            }
+        ]).then((response) => {
+            raceEvent.classes[args.class].results.map((r) => {
+                let id = `${r.transponder}:${r.name}`;
+                if(id === response.id && r.heat === args.heat && r.group === args.group) {
+                    r.adjustment = response.alterlap;
+                }
+            });
+
+
+            writeRaceEvent();
+            cb();
+
+        }).catch((err) => {
+            cb();
+        });
+
+
+
+
+    });
+
+vorpal
     .command("allresults", "Detail results for all classes")
     .action(function(args, cb){
         if(!raceEvent?.classes){
@@ -452,7 +524,7 @@ vorpal
             this.log(`No Class: ${arg.class}`);
         }else{
             //Display Line up
-            let {racers, heats}  = sortHeatResults(raceEvent.classes[args.class].results);
+            let {racers, heats}  = sortHeatResults(raceEvent.classes[args.class].results,args.class);
             let finalSplit = Math.ceil(racers.length / (raceEvent.classes[args.class]?.split || config.finalGroupSplit));
             let sliceStart = (args.group.charCodeAt(0)-65)*finalSplit;
             let raceList = racers.slice(sliceStart, sliceStart+finalSplit);
@@ -562,8 +634,10 @@ vorpal
 //**
 
 function compareTimes(a,b) {
-    if(a.laps !== b.laps){
-        return b.laps - a.laps;
+    a.adjustment =  a.adjustment ||0;
+    b.adjustment =  b.adjustment ||0;
+    if(a.laps + a.adjustment !== b.laps + b.adjustment){
+        return (b.laps + b.adjustment) - (a.laps + a.adjustment);
     }else{
         return a.elapsed - b.elapsed;
     }
@@ -729,7 +803,8 @@ function attemptSocketConnection() {
                                         raceEvent.raceday.push({
                                             class:raceEvent.nextClass,
                                             heat:raceEvent.nextHeat,
-                                            group:raceEvent.nextGroup
+                                            group:raceEvent.nextGroup,
+                                            adjustment:{}
                                         });
                                         delete raceEvent.nextHeat;
                                     }
@@ -958,7 +1033,7 @@ function sendSerialMessage(msg, showConsole = true){
     if(showConsole)console.log(msg);
 }
 
-function sortHeatResults(winnerList){
+function sortHeatResults(winnerList,className){
     let racers = {};
     let heats = {};
     winnerList.map(winner => {
@@ -966,7 +1041,7 @@ function sortHeatResults(winnerList){
         if(!racers[id]){
             racers[id] = {name: winner.name, id: id, heat:{},points:0};
         }
-        racers[id].heat[winner.heat || 0] = {laps:winner.laps, elapsed:winner.elapsed};
+        racers[id].heat[winner.heat || 0] = {laps:winner.laps, elapsed:winner.elapsed, adjustment:winner.adjustment || 0};
 
         if(!heats[winner.heat || 0]){
             heats[winner.heat || 0] = [];
@@ -1003,10 +1078,12 @@ function sortHeatResults(winnerList){
         let b_rheats = Object.values(b.heat);
         b_rheats.sort(compareTimes);
         let b_Best = b_rheats[0];
+        a_Best.adjustment = a_Best.adjustment || 0;
+        b_Best.adjustment = b_Best.adjustment || 0;
         if(a.points !== b.points){
             return b.points - a.points;
-        }else if(a_Best.laps !== b_Best.laps){
-            return b_Best.laps - a_Best.laps;
+        }else if(a_Best.laps + a_Best.adjustment !== b_Best.laps + b_Best.adjustment){
+            return (b_Best.laps + b_Best.adjustment) - (a_Best.laps + a_Best.adjustment);
         }else{
             return a_Best.elapsed - b_Best.elapsed;
         }
@@ -1016,7 +1093,7 @@ function sortHeatResults(winnerList){
 }
 
 function displayResults(className){
-    let {racers, heats}  = sortHeatResults(raceEvent.classes[className].results);
+    let {racers, heats}  = sortHeatResults(raceEvent.classes[className].results,className);
     if(!racers.length){
         console.log("No results found.");
         return;
@@ -1073,7 +1150,7 @@ function displayResults(className){
         };
         for(let heat in heats){
             let f =racer.heat[heat];
-            out[heat] = f ? `${f.laps}/${convertMilliSecondToReadable(f.elapsed)}`:'--';
+            out[heat] = f ? `${f.laps}/${convertMilliSecondToReadable(f.elapsed)}${f.adjustment?'('+f.adjustment+'adj)':''}`:'--';
         }
         p.addRow(out,{separator: newGroup});
         if(newGroup){
@@ -1093,7 +1170,7 @@ function displayResults(className){
             return self.indexOf(item) === pos;
         }) || [];
     finalGroups.map(group=>{
-        let res = sortHeatResults(raceEvent.classes[className].finals.filter(racer=>racer.group===group))
+        let res = sortHeatResults(raceEvent.classes[className].finals.filter(racer=>racer.group===group),className)
 
         console.log(`Finals for Group: ${group}\n`);
 
@@ -1165,7 +1242,7 @@ function exportResults(className){
     let dataArr=[];
     let sheets=['Heats'];
 
-    let {racers, heats}  = sortHeatResults(raceEvent.classes[className].results);
+    let {racers, heats}  = sortHeatResults(raceEvent.classes[className].results,className);
 
     let schema1 = [
         {
@@ -1229,7 +1306,7 @@ function exportResults(className){
             return self.indexOf(item) === pos;
         }) || [];
     finalGroups.map(group=>{
-        let res = sortHeatResults(raceEvent.classes[className].finals.filter(racer=>racer.group===group))
+        let res = sortHeatResults(raceEvent.classes[className].finals.filter(racer=>racer.group===group),className)
 
         let schema2 = [
             {
