@@ -85,6 +85,76 @@ vorpalHelper.map(p=>{
 
 
 vorpal
+    .command("adjustfinal <class> [group]", "Adjust a User result for a race")
+    .types({
+        string: ['class','group']//,  integer: ['heat']
+    })
+    .autocomplete({data: function(input, cb, arg) {
+            if(arg === 'class') {
+                cb(Object.keys(raceEvent.classes));
+            }else if(arg === 'group') {
+                cb(["A","B","C","D","E","F"]);
+            }else{
+                cb([]);
+            }
+        }})
+    .action(function(args, cb) {
+        if (!raceEvent?.classes?.[args.class]) {
+            cb();
+            return;
+        }
+
+        let final = raceEvent.raceday
+            .filter(race => race.class === args.class
+                && race.group === (args.group || "") && race.final===1);
+
+        if (!final.length) {
+            this.log('This race has not been run');
+            cb();
+        }
+        //Found the race...
+        let choices = {};
+        raceEvent.classes[args.class].finals.map((r) => {
+            let id = `${r.transponder}:${r.name}`;
+            if(!choices[id]){
+                choices[id] = {title:id, value:id};
+            }
+        });
+        prompts([
+            {
+                type: 'select',
+                name: 'id',
+                message: 'Select User to Alter:',
+                choices: Object.values(choices)
+            },
+            {
+                type: 'number',
+                name: 'alterlap',
+                initial: 0,
+                message: 'How Many lap to add/remove?:'
+            }
+        ]).then((response) => {
+            raceEvent.classes[args.class].finals.map((r) => {
+                let id = `${r.transponder}:${r.name}`;
+                if(id === response.id && r.group === args.group) {
+                    r.adjustment = response.alterlap;
+                }
+            });
+
+
+            writeRaceEvent();
+            cb();
+
+        }).catch((err) => {
+            cb();
+        });
+
+
+
+
+    });
+
+vorpal
     .command("allresults", "Detail results for all classes")
     .action(function(args, cb){
         if(!global.raceEvent?.classes){
