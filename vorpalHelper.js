@@ -1,10 +1,11 @@
 
 const prompts = require("prompts");
 const {globSync} = require("glob");
-const {cleanClass, compareTimes, heatlist, grouplist} = require("./utils");
+const {cleanClass, compareTimes, heatlist, grouplist, sortHeatResults, displayResults, exportResults} = require("./utils");
 const {relistSerial, serialPorts, SerialConnect, sendSerialMessage} = require("./serial");
 const {speakUp} = require("./audio");
 const {writeRaceEvent, writeConfig, loadRaceEventFile} = require("./fileHandling");
+const {Table} = require("console-table-printer");
 
 
 
@@ -47,7 +48,7 @@ let vorpalHelper = [
         action: function(args, cb){
             global.config.api = args.api;
             writeConfig();
-            global.attemptSocketConnection();
+            attemptSocketConnection();
             cb();
         }
     },
@@ -66,7 +67,7 @@ let vorpalHelper = [
         action: function(args, cb){
             global.config.ip = args.ip;
             writeConfig();
-            global.attemptSocketConnection();
+            attemptSocketConnection();
             cb();
         }
     },
@@ -75,7 +76,7 @@ let vorpalHelper = [
         description: "Reconnect to NLT",
         action: function(args, cb){
             relistSerial();
-            global.attemptSocketConnection();
+            attemptSocketConnection();
             cb();
         }
     },
@@ -142,8 +143,8 @@ let vorpalHelper = [
                 classes: {}
             };
 
-            Object.keys(global.config.defaultClasses).map((className) => {
-                global.raceEvent.classes[className] = cleanClass();
+            global.config.defaultClasses.map((className) => {
+                global.raceEvent.classes[className.value] = cleanClass();
             });
             global.raceEvent.raceday=[];
             writeConfig();
@@ -301,7 +302,7 @@ let vorpalHelper = [
         action: function(args, cb){
             if(args.class){
                 if(!global.raceEvent.classes[args.class]){
-                    this.log("No Class with that name")
+                    console.log("No Class with that name\n")
                     cb();
                     return;
                 }
@@ -348,9 +349,9 @@ let vorpalHelper = [
             if(global.raceEvent.raceday
                 .filter(race=>race.class===args.class
                     && race.group===args.group && race.heat===args.heat).length){
-                this.log('This race has already been run');
+                console.log('This race has already been run');
             }else if(!global.raceEvent.classes[args.class]){
-                this.log(`No Class: ${arg.class}`);
+                console.log(`No Class: ${args.class}\n`);
             }else{
                 //Display Line up
                 let raceList = global.raceEvent.classes[args.class].results.filter(res=>res.heat===args.heat-1 && res.group===(args.group||""));
@@ -417,7 +418,7 @@ let vorpalHelper = [
                 }).then((result) => {
                     if (result.confirmDelete) {
                         // Add actual deletion logic here
-                        this.log(`Deleting ${args.class}...`);
+                        console.log(`Deleting ${args.class}...\n`);
                         global.raceEvent.raceday = global.config.raceday
                             .filter(race=>race.class!==args.class
                                 || race.group!==(args.group||"") || race.heat!==args.heat);
@@ -426,12 +427,12 @@ let vorpalHelper = [
                             .filter(race => (race.group||"")!==(args.group||"") || race.heat!==args.heat);
                         writeRaceEvent();
                     } else {
-                        this.log(`Deletion of ${args.class} cancelled.`);
+                        console.log(`Deletion of ${args.class} cancelled.\n`);
                     }
                     cb();
                 });
             }else{
-                this.log(`Race does not exist.`);
+                console.log(`Race does not exist.\n`);
                 cb();
             }
         }
@@ -472,7 +473,7 @@ let vorpalHelper = [
                     && race.group === (args.group || "") && race.heat === args.heat);
 
             if (!heat.length) {
-                this.log('This race has not been run');
+                console.log(`This race has not been run\n`);
                 cb();
             }
             //Found the race...
@@ -509,6 +510,276 @@ let vorpalHelper = [
             }).catch((err) => {
                 cb();
             });
+        }
+    },
+    {
+        command: 'mergeuser',
+        description: "Merge user results for a class",
+        fields:()=> {
+            return [
+                {
+                    name: 'class',
+                    message: 'Class',
+                    type: 'select',
+                    choices: global.config.defaultClasses
+                }
+            ];
+        },
+        action: function(args, cb){
+            if(!global.raceEvent.classes[args.class]){
+                console.log(`No Class: ${arg.class}\n`);
+                cb();
+                return;
+            }
+
+
+            let choices = {};
+            global.raceEvent.classes[args.class].results.map((r) => {
+                let id = `${r.transponder}:${r.name}`;
+                if(!choices[id]){
+                    choices[id] = {title:id, value:id};
+                }
+            });
+
+            global.raceEvent.classes[args.class].finals.map((r) => {
+                let id = `${r.transponder}:${r.name}`;
+                if(!choices[id]){
+                    choices[id] = {title:id, value:id};
+                }
+            });
+
+            prompts([
+                {
+                    type: 'select',
+                    name: 'id',
+                    message: 'Select User Merge:',
+                    choices: Object.values(choices)
+                },
+                {
+                    type: 'select',
+                    name: 'id2',
+                    message: 'Select User Merge into:',
+                    choices: Object.values(choices)
+                }
+            ]).then((response) => {
+                let [newtransponder, newname] = response.id2.split(':');
+                global.raceEvent.classes[args.class].results.map((r) => {
+                    let id =`${r.transponder}:${r.name}`;
+                    if(id === response.id){
+                        r.name=newname;
+                        r.transponder=newtransponder;
+                    }
+                });
+
+                global.raceEvent.classes[args.class].finals.map((r) => {
+                    let id = `${r.transponder}:${r.name}`;
+                    if(id === response.id){
+                        r.name=newname;
+                        r.transponder=newtransponder;
+                    }
+                });
+                writeRaceEvent();
+                cb();
+
+            }).catch((err) => {
+                cb();
+            });
+        }
+    },
+    {
+        command: 'final',
+        description: "Set next Class and optional Group for a final race ",
+        fields:()=> {
+            return [
+
+                {
+                    name: 'class',
+                    message: 'Class',
+                    type: 'select',
+                    choices: global.config.defaultClasses
+                },
+                {
+                    name: 'group',
+                    message: 'Group',
+                    type: 'select',
+                    choices: grouplist
+                }
+            ];
+        },
+        action: function(args, cb){
+            if(!global.raceEvent.classes[args.class]){
+                console.log(`No Class: ${arg.class}\n`);
+            }else{
+                //Display Line up
+                let {racers, heats}  = sortHeatResults(global.raceEvent.classes[args.class].results,args.class);
+                let finalSplit = Math.ceil(racers.length / (global.raceEvent.classes[args.class]?.split || global.config.finalGroupSplit));
+                let sliceStart = (args.group.charCodeAt(0)-65)*finalSplit;
+                let raceList = racers.slice(sliceStart, sliceStart+finalSplit);
+                if(raceList.length > 0){
+                    const p = new Table({
+                        columns: [{
+                            name: "position",
+                            alignment: "center",
+                            title: "Line Up POS"
+                        },
+                            {
+                                name: "name",
+                                alignment: "left",
+                                title: "Name",
+                            }
+                        ]
+                    });
+                    raceList.map((racer,idx) => {
+                        let out = { position: idx+1, name:racer.name};
+                        p.addRow(out);
+                    })
+                    p.printTable();
+                }
+
+
+                global.raceEvent.nextClass = args.class;
+                global.raceEvent.nextGroup = args.group;
+                global.raceEvent.nextFinal = 1;
+                sendSerialMessage(`Final: ${global.raceEvent.nextClass}${ global.raceEvent.nextGroup ? ' '+ global.raceEvent.nextGroup:'' }`);
+                if(!global.config.mute.lineup)speakUp(`${global.raceEvent.nextClass} class ${ global.raceEvent.nextGroup ? 'Group '+ global.raceEvent.nextGroup:'' } to line up for the Final`);
+
+            }
+            cb();
+        }
+    },
+    {
+        command: 'adjustfinal',
+        description: "Adjust a User result for a final",
+        fields:()=> {
+            return [
+                {
+                    name: 'class',
+                    message: 'Class',
+                    type: 'select',
+                    choices: global.config.defaultClasses
+                },
+                {
+                    name: 'group',
+                    message: 'Group',
+                    type: 'select',
+                    choices: grouplist
+                }
+            ];
+        },
+        action: function(args, cb){
+            if (!raceEvent?.classes?.[args.class]) {
+                cb();
+                return;
+            }
+
+            let final = raceEvent.raceday
+                .filter(race => race.class === args.class
+                    && race.group === (args.group || "") && race.final===1);
+
+            if (!final.length) {
+                console.log(`This race has not been run\n`);
+                cb();
+            }
+            //Found the race...
+            let choices = {};
+            raceEvent.classes[args.class].finals.map((r) => {
+                let id = `${r.transponder}:${r.name}`;
+                if(!choices[id]){
+                    choices[id] = {title:id, value:id};
+                }
+            });
+            prompts([
+                {
+                    type: 'select',
+                    name: 'id',
+                    message: 'Select User to Alter:',
+                    choices: Object.values(choices)
+                },
+                {
+                    type: 'number',
+                    name: 'alterlap',
+                    initial: 0,
+                    message: 'How Many lap to add/remove?:'
+                }
+            ]).then((response) => {
+                raceEvent.classes[args.class].finals.map((r) => {
+                    let id = `${r.transponder}:${r.name}`;
+                    if(id === response.id && r.group === args.group) {
+                        r.adjustment = response.alterlap;
+                    }
+                });
+
+
+                writeRaceEvent();
+                cb();
+
+            }).catch((err) => {
+                cb();
+            });
+        }
+    },
+    {
+        command: 'results',
+        description: "Detail overall position results for a class",
+        fields:()=> {
+            return [
+
+                {
+                    name: 'class',
+                    message: 'Class',
+                    type: 'select',
+                    choices: global.config.defaultClasses
+                }
+            ];
+        },
+        action: function(args, cb){
+            if(!global.raceEvent?.classes[args.class]){
+                cb();
+                return;
+            }
+            displayResults(args.class);
+            cb();
+        }
+    },
+    {
+        command: 'export',
+        description: "Export results for a class",
+        fields:()=> {
+            return [
+
+                {
+                    name: 'class',
+                    message: 'Class',
+                    type: 'select',
+                    choices: global.config.defaultClasses
+                }
+            ];
+        },
+        action: function(args, cb){
+            if(!global.raceEvent?.classes[args.class]){
+                cb();
+                return;
+            }
+            exportResults(args.class);
+            cb();
+        }
+    },
+    {
+        command: 'allresults',
+        description: "Detail results for all classes",
+        action: function(args, cb){
+            if(!global.raceEvent?.classes){
+                cb();
+                return;
+            }
+            Object.keys(global.raceEvent.classes).map(className=>{
+                console.log(`${className} Results\n`);
+
+                displayResults(className);
+                console.log(`=============================================\n`);
+            });
+
+            cb();
         }
     }
 ];

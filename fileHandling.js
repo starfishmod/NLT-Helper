@@ -1,9 +1,10 @@
+const {existsSync, readFileSync, writeFileSync} = require("node:fs");
 const configVersion = 4;
 const configFileLocation = './config.json';
 
 
 function loadConfig(){
-    let fConf = fs.existsSync(configFileLocation)?JSON.parse(fs.readFileSync(configFileLocation)):{};
+    let fConf = existsSync(configFileLocation)?JSON.parse(readFileSync(configFileLocation)):{};
     let prevVer = fConf.version || 0;
     global.config = {
         did : Math.random().toString(36).slice(2),
@@ -61,7 +62,7 @@ function loadRaceEventFile(){
         console.log("No Race Event file found, cannot load RaceEventFile. Please use \"newevent\" command");
         return;
     }
-    let raceeventFile = fs.existsSync(global.config.raceEventFile)?fs.readFileSync(global.config.raceEventFile):null;
+    let raceeventFile = existsSync(global.config.raceEventFile)?readFileSync(global.config.raceEventFile):null;
     if(!raceeventFile){
         console.log("Race Event File not Found. Please use \"newevent\" or \"loadevent\" command");
         return
@@ -72,11 +73,11 @@ function loadRaceEventFile(){
 }
 
 function writeConfig(){
-    fs.writeFileSync(configFileLocation, JSON.stringify(global.config,2,2), {flag: 'w+'});
+    writeFileSync(configFileLocation, JSON.stringify(global.config,2,2), {flag: 'w+'});
 }
 
 function writeRaceEvent(){
-    fs.writeFileSync(global.config.raceEventFile, JSON.stringify(global.raceEvent,2,2), {flag: 'w+'});
+    writeFileSync(global.config.raceEventFile, JSON.stringify(global.raceEvent,2,2), {flag: 'w+'});
 }
 
 module.exports = {

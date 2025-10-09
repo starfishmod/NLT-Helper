@@ -2,6 +2,7 @@ const wav = require('wav');
 const Speaker = require('speaker');
 const {platform} = require("node:os");
 const say = require('say');
+const {createReadStream} = require("node:fs");
 
 let speaking = false;
 function speakUp(txt){
@@ -24,7 +25,7 @@ function speakUp(txt){
 
 function countdown(){
     if(global.config.mute.countdown)return;
-    const file = fs.createReadStream(__dirname+'/countdown.wav');
+    const file = createReadStream(__dirname+'/countdown.wav');
     const reader = new wav.Reader();
 
     reader.on('format', (format) => {

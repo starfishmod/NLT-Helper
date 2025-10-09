@@ -41,7 +41,7 @@ function SerialConnect(){
 
 function sendSerialMessage(msg, showConsole = true){
     if(global.sPort)global.sPort.write(msg+"\n");
-    if(showConsole)console.log(msg);
+    if(showConsole)console.log(msg+"\n");
 }
 
 relistSerial();
