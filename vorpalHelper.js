@@ -14,25 +14,7 @@ const {Table} = require("console-table-printer");
 
 
 let vorpalHelper = [
-    {
-        command: 'port',
-        description: "Sets the serial port.",
-        fields:[
-            {
-                name: 'port',
-                required: true,
-                message: 'Choose Serial Port',
-                type: 'select',
-                choices : serialPorts
-            }
-        ],
-        action: function(args, cb){
-            global.config.port = args.port;
-            writeConfig();
-            SerialConnect();
-            cb();
-        }
-    },
+
     {
         command: 'apikey',
         description: "Sets the API key.",
@@ -91,6 +73,33 @@ let vorpalHelper = [
         }
     },
     {
+        command: 'port',
+        description: "Sets the serial port.",
+        fields:[
+            {
+                name: 'port',
+                required: true,
+                message: 'Choose Serial Port',
+                type: 'select',
+                choices : serialPorts
+            }
+        ],
+        action: function(args, cb){
+            global.config.port = args.port;
+            writeConfig();
+            SerialConnect();
+            cb();
+        }
+    },
+    {
+        command: 'smsg <msg...>',
+        description: "Serial Output Message",
+        action: function(args, cb){
+            sendSerialMessage(args.msg.join(' '));
+            cb();
+        }
+    },
+    {
         command: 'audio',
         description: "Mute/UnMute Audio features.",
         fields:()=>{return [
@@ -124,7 +133,7 @@ let vorpalHelper = [
     },
     {
         command: 'newevent',
-        description: "Start a new event",
+        description: "Start a new event/race day",
         fields:[
             {
                 name: 'eventname',
@@ -154,7 +163,7 @@ let vorpalHelper = [
     },
     {
         command: 'loadevent',
-        description: "Load a previous event",
+        description: "Load a previous event/race day",
         fields:()=>{
             let jsfiles = globSync('./event_*') || [];
             let choices = [];
