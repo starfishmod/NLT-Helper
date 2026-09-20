@@ -11,7 +11,9 @@ const {speakUp} = require("./audio");
 
 loadConfig();
 
-speakUp(`NLT Helper`);
+speakUp(`NLT Helper provided by rc-clubs.com`);
+console.log("For an integrated solution of timing with heats and classes, and club management please visit https://www.rc-clubs.com")
+;
 SerialConnect();
 attemptSocketConnection();
 

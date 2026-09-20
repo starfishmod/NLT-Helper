@@ -13,6 +13,7 @@ function loadConfig(){
         debug: false,
         raceday:[],
         mute:{},
+        ipport:14122,
         //finalsplit:8,
         finalGroupSplit:1,
         points:[10,8,7,6,5,4,3,2,1],

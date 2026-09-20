@@ -1,11 +1,13 @@
-# NLT Helper
-This is a commandline tool for working with [Next Level Timing](https://nextleveltiming.com/) v.4.6.0+
+# NLT Helper (provided by https://rc-clubs.com)
+This is a commandline tool for working with [Next Level Timing](https://nextleveltiming.com/) v.4.6.0+ to provide classes and heats support over 
+the available NLT socket. 
 
 This is purely a demo application and may not suit your needs.
-We use this with [Brisbane RC Mini and Micro Buggy Racing](https://www.facebook.com/groups/bneminibuggies) to track our daily progress with heats and finals where we have 2 classes.
-While NLT is a great product (I recommend using it!), it doesn't support some of these thing easily (at least not yet - hint hint :P ).
 
-What does it do:
+For a more integrated solution please visit https://www.rc-clubs.com which provides Timing (with classes, heats, group, 
+final calculations etc) mixed in with club management tools.
+
+What does NLT Helper do:
 * Has a countdown announcement - so racers have more than the start beep.
 * Has a serial driver to announce start, end, laptimes and last lap. We use this with a LED display panel
 * Has class handling - add a class record heat results to a class
@@ -34,6 +36,9 @@ Sets the apikey needed to connect to NLT. You'll find this apikey in the Setting
 
 #### ip ```ip_address```            
 Sets the ip to find NLT - defaults to 127.0.0.1 
+
+#### ipport ```ip_port```
+Sets the IP port number to find NLT - defaults to 14122. This was changed from 3001 in 4.9.1
 
 #### port ```serial_port```        
 Sets the serial port for sending strings to display. Hitting Tab after the port will give you a list of ports.
@@ -151,15 +156,4 @@ See results for all classes.
 Export the result for a class. This will be exported as an XLSX file in the same directory as the app.
 
 
-
-
-
-## Clubs Using NLT Helper 
-Please let us know if you use this software - it helps me keep motivated :)
-
-| Club                                                                                                       | link                                                                                                            |
-|------------------------------------------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------------------------|
-| <img src="https://github.com/user-attachments/assets/a9086b3b-b85d-4df2-8cd6-1790629a6bb5" width="100px"/> | [High Rollers RC Funpark](https://www.facebook.com/profile.php?id=61560016574097) (Michigan, USA)               |
-| <img src="https://github.com/user-attachments/assets/ff38d5b8-af60-42ab-9591-d19d81dc4a7f" width="100px"/> | [Brisbane RC Mini and Micro Buggy Racing](https://www.facebook.com/groups/bneminibuggies) (Brisbane, Australia) |
-| <img src="https://github.com/user-attachments/assets/bbe809a4-3923-42df-abc3-c9d6ca1bdfca" width="100px"/> | [San Diego RC Events and Parties](https://www.sandiegorcevents.com/)                                            |
 

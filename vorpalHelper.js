@@ -54,6 +54,25 @@ let vorpalHelper = [
         }
     },
     {
+        command: 'ipport',
+        description: "Sets the IP port of .",
+        fields:()=>{return[
+            {
+                name: 'ipport',
+                required: true,
+                message: 'IP Port (14122 > NLT 4.9.1, otherwise 3001)',
+                type: 'number',
+                initial:global.config.ipport
+            }
+        ]},
+        action: function(args, cb){
+            global.config.ipport = args.ipport;
+            writeConfig();
+            attemptSocketConnection();
+            cb();
+        }
+    },
+    {
         command: 'reconnect',
         description: "Reconnect to NLT",
         action: function(args, cb){

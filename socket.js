@@ -13,11 +13,11 @@ function attemptSocketConnection() {
     if (global.socket && global.socket.connected) {
         return;
     }
-    if (!global.config.ip || !global.config.api) {
+    if (!global.config.ip || !global.config.api || !global.config.ipport) {
         return;
     }
     console.log("Connecting to socket\n");
-    global.socket = io(`ws://${global.config.ip}:3001/neon-timing?token=${global.config.api}`, {
+    global.socket = io(`ws://${global.config.ip}:${global.config.ipport}/neon-timing?token=${global.config.api}`, {
         transports: ['websocket'],
         upgrade: false,
         reconnectionDelayMax: 2000
